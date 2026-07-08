@@ -1,0 +1,10 @@
+node_modules
+dist
+.env
+.env.local
+*.tsbuildinfo
+.codex
+*.sqlite
+auth*.json
+cap_sid
+installation_id
