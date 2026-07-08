@@ -17,8 +17,18 @@
     "jsx": "react-jsx",
     "baseUrl": ".",
     "paths": {
-      "@/*": ["src/*"]
+      "@/*": ["*"]
     }
   },
-  "include": ["src"]
+  "include": [
+    "App.tsx",
+    "main.tsx",
+    "vite-env.d.ts",
+    "components/**/*.ts",
+    "components/**/*.tsx",
+    "lib/**/*.ts",
+    "lib/**/*.tsx",
+    "pages/**/*.ts",
+    "pages/**/*.tsx"
+  ]
 }
