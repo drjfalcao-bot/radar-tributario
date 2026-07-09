@@ -4,6 +4,7 @@ import { AccessPendingPage } from "@/pages/AccessPendingPage";
 import { AdminUsersPage } from "@/pages/AdminUsersPage";
 import { DiagnosticPage } from "@/pages/DiagnosticPage";
 import { DocumentosPage } from "@/pages/DocumentosPage";
+import { GuidedDiagnosticPage } from "@/pages/GuidedDiagnosticPage";
 import { LeadDetailPage } from "@/pages/LeadDetailPage";
 import { LeadsPage } from "@/pages/LeadsPage";
 import { LoginPage } from "@/pages/LoginPage";
@@ -26,6 +27,14 @@ export function App() {
         element={
           <ProtectedRoute>
             <Navigate to="/app/leads" replace />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/app/diagnostico/novo"
+        element={
+          <ProtectedRoute>
+            <GuidedDiagnosticPage />
           </ProtectedRoute>
         }
       />

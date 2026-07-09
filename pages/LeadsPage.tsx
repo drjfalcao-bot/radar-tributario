@@ -13,6 +13,7 @@ import {
   Search,
   Settings,
   ShieldCheck,
+  Sparkles,
 } from "lucide-react";
 import { formatCurrency } from "@/lib/RiskCalculator";
 import { calculateCrmInsights } from "@/lib/crm";
@@ -75,9 +76,33 @@ export function LeadsPage() {
 
   return (
     <ProShell
-      title="Central de Leads Tributarios"
-      subtitle="CRM interno para captar, qualificar e transformar diagnosticos em oportunidades fiscais."
+      title="Central Estrategica"
+      subtitle="Ambiente central para diagnosticos, oportunidades, clientes, propostas e acompanhamento estrategico."
     >
+      <section className="mb-6 overflow-hidden rounded-lg border border-[#173b37] bg-[#102524] p-5 text-white shadow-panel md:p-6">
+        <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
+          <div>
+            <div className="flex items-center gap-2 text-xs font-semibold uppercase text-[#c9aa63]">
+              <Sparkles className="h-4 w-4" />
+              Central Estrategica
+            </div>
+            <h2 className="mt-3 text-2xl font-semibold tracking-tight md:text-3xl">
+              Transforme dados empresariais em estrategia
+            </h2>
+            <p className="mt-3 max-w-3xl text-sm leading-6 text-white/72">
+              Inicie um diagnostico durante a reuniao, acompanhe os indicadores em tempo real e avance para simulacao, parecer e proposta.
+            </p>
+          </div>
+          <Link
+            to="/app/diagnostico/novo"
+            className="inline-flex min-h-11 items-center justify-center gap-2 rounded-md bg-white px-4 text-sm font-semibold uppercase text-petroleum-900 hover:bg-[#e8f2ee]"
+          >
+            Iniciar novo diagnostico
+            <ArrowRight className="h-4 w-4" />
+          </Link>
+        </div>
+      </section>
+
       <section className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
         <Metric icon={BriefcaseBusiness} label="Leads no radar" value={String(items.length)} detail="Base consultiva ativa" />
         <Metric icon={BarChart3} label="Valor potencial" value={formatCurrency(stats.pipelineValue)} detail="Passivo + oportunidade" />
@@ -323,7 +348,7 @@ export function ProShell({
 }) {
   const location = useLocation();
   const navItems = [
-    { to: "/app/leads", label: "CRM", icon: LayoutDashboard },
+    { to: "/app/leads", label: "Central", icon: LayoutDashboard },
     { to: "/", label: "Radar publico", icon: Calculator },
     { to: "/admin/usuarios", label: "Usuarios", icon: Settings },
   ];
@@ -368,7 +393,7 @@ export function ProShell({
 
         <section className="px-4 py-6 sm:px-6 lg:px-8">
           <header className="mb-6">
-            <p className="text-xs font-semibold uppercase text-petroleum-700">Area Pro</p>
+            <p className="text-xs font-semibold uppercase text-petroleum-700">Central Estrategica</p>
             <h1 className="mt-1 text-2xl font-semibold text-ink md:text-3xl">{title}</h1>
             {subtitle ? <p className="mt-2 max-w-3xl text-sm text-neutral-600">{subtitle}</p> : null}
           </header>
