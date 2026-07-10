@@ -2,6 +2,8 @@ import { Navigate, Route, Routes } from "react-router-dom";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { AccessPendingPage } from "@/pages/AccessPendingPage";
 import { AdminUsersPage } from "@/pages/AdminUsersPage";
+import { AreaProPage } from "@/pages/AreaProPage";
+import { CentralStrategicPage } from "@/pages/CentralStrategicPage";
 import { DiagnosticPage } from "@/pages/DiagnosticPage";
 import { DocumentosPage } from "@/pages/DocumentosPage";
 import { GuidedDiagnosticPage } from "@/pages/GuidedDiagnosticPage";
@@ -26,10 +28,28 @@ export function App() {
         path="/app"
         element={
           <ProtectedRoute>
-            <Navigate to="/app/leads" replace />
+            <Navigate to="/app/inicio" replace />
           </ProtectedRoute>
         }
       />
+      <Route
+        path="/app/inicio"
+        element={
+          <ProtectedRoute>
+            <CentralStrategicPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/app/pro"
+        element={
+          <ProtectedRoute>
+            <AreaProPage />
+          </ProtectedRoute>
+        }
+      />
+
+      {/* Rota legada preservada durante a migração estrutural. */}
       <Route
         path="/app/leads"
         element={
