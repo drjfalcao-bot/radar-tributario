@@ -13,7 +13,6 @@ import {
   Search,
   Settings,
   ShieldCheck,
-  Sparkles,
 } from "lucide-react";
 import { formatCurrency } from "@/lib/RiskCalculator";
 import { calculateCrmInsights } from "@/lib/crm";
@@ -76,28 +75,24 @@ export function LeadsPage() {
 
   return (
     <ProShell
-      title="Central Estrategica"
-      subtitle="Ambiente central para diagnosticos, oportunidades, clientes, propostas e acompanhamento estrategico."
+      title="Central Estratégica"
+      subtitle="Ambiente central para diagnósticos, oportunidades, clientes, propostas e acompanhamento estratégico."
     >
-      <section className="mb-6 overflow-hidden rounded-lg border border-[#173b37] bg-[#102524] p-5 text-white shadow-panel md:p-6">
-        <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
+      <section className="mb-6 rounded-lg border border-[#143a36] bg-[#102524] p-5 text-white shadow-panel">
+        <div className="flex flex-col gap-5 xl:flex-row xl:items-center xl:justify-between">
           <div>
-            <div className="flex items-center gap-2 text-xs font-semibold uppercase text-[#c9aa63]">
-              <Sparkles className="h-4 w-4" />
-              Central Estrategica
-            </div>
-            <h2 className="mt-3 text-2xl font-semibold tracking-tight md:text-3xl">
-              Transforme dados empresariais em estrategia
-            </h2>
-            <p className="mt-3 max-w-3xl text-sm leading-6 text-white/72">
-              Inicie um diagnostico durante a reuniao, acompanhe os indicadores em tempo real e avance para simulacao, parecer e proposta.
+            <p className="text-xs font-semibold uppercase tracking-wide text-[#c9aa63]">Atendimento consultivo</p>
+            <h2 className="mt-2 text-2xl font-semibold md:text-3xl">Transforme dados empresariais em estratégia</h2>
+            <p className="mt-2 max-w-3xl text-sm leading-6 text-white/72">
+              Inicie um diagnóstico durante a reunião, acompanhe os indicadores em tempo real e avance para simulação,
+              parecer e proposta.
             </p>
           </div>
           <Link
             to="/app/diagnostico/novo"
-            className="inline-flex min-h-11 items-center justify-center gap-2 rounded-md bg-white px-4 text-sm font-semibold uppercase text-petroleum-900 hover:bg-[#e8f2ee]"
+            className="inline-flex min-h-11 items-center justify-center gap-2 rounded-md bg-[#c9aa63] px-4 text-sm font-semibold text-[#102524] transition hover:bg-[#d8bd7a]"
           >
-            Iniciar novo diagnostico
+            INICIAR NOVO DIAGNÓSTICO
             <ArrowRight className="h-4 w-4" />
           </Link>
         </div>
@@ -393,7 +388,7 @@ export function ProShell({
 
         <section className="px-4 py-6 sm:px-6 lg:px-8">
           <header className="mb-6">
-            <p className="text-xs font-semibold uppercase text-petroleum-700">Central Estrategica</p>
+            <p className="text-xs font-semibold uppercase text-petroleum-700">Central Estratégica</p>
             <h1 className="mt-1 text-2xl font-semibold text-ink md:text-3xl">{title}</h1>
             {subtitle ? <p className="mt-2 max-w-3xl text-sm text-neutral-600">{subtitle}</p> : null}
           </header>

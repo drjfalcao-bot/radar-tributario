@@ -31,18 +31,18 @@ export function App() {
         }
       />
       <Route
-        path="/app/diagnostico/novo"
-        element={
-          <ProtectedRoute>
-            <GuidedDiagnosticPage />
-          </ProtectedRoute>
-        }
-      />
-      <Route
         path="/app/leads"
         element={
           <ProtectedRoute>
             <LeadsPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/app/diagnostico/novo"
+        element={
+          <ProtectedRoute>
+            <GuidedDiagnosticPage />
           </ProtectedRoute>
         }
       />

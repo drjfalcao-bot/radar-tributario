@@ -1,22 +1,20 @@
 import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { AlertTriangle, ArrowRight, CheckCircle2, Save, ShieldCheck } from "lucide-react";
+import { ArrowRight, Building2, CheckCircle2, Landmark, LineChart, Save, ShieldCheck } from "lucide-react";
 import { MoneyInput } from "@/components/FormControls";
-import { ProShell } from "@/pages/LeadsPage";
+import { ResultPanel } from "@/components/ResultPanel";
 import {
   calculateDiagnostic,
   DiagnosticInputSchema,
   formatCurrency,
   type DiagnosticInput,
-  type DiagnosticResult,
 } from "@/lib/RiskCalculator";
 import { saveDiagnostic } from "@/lib/storage";
+import { ProShell } from "@/pages/LeadsPage";
 
-type FieldErrors = Partial<Record<keyof DiagnosticInput, string>>;
+type FieldErrors = Record<string, string>;
 
-const STEPS = ["Perfil", "Empresa", "Receita", "Reforma", "Passivo", "Cenarios", "Parecer", "Proposta"];
-
-const DEFAULT_INPUT: DiagnosticInput = {
+const INITIAL_INPUT: DiagnosticInput = {
   nomeEmpresa: "",
   contato: "",
   cnpj: "",
@@ -24,9 +22,9 @@ const DEFAULT_INPUT: DiagnosticInput = {
   setor: "nao_sei",
   porteEmpresa: "nao_sei",
   numeroFuncionarios: 0,
-  faturamentoMensal: 0,
+  faturamentoMensal: 10000,
   percentualB2B: 0,
-  margemPercentual: 15,
+  margemPercentual: 10,
   comprasCreditaveisPercentual: 0,
   possuiClientePjRelevante: "nao_sei",
   sistemaFiscalPreparado: "nao_sei",
@@ -41,54 +39,100 @@ const DEFAULT_INPUT: DiagnosticInput = {
   objetivoCliente: "nao_sei",
 };
 
+const STEPS = ["Perfil", "Empresa", "Receita", "Reforma", "Passivo", "Cenarios", "Parecer", "Proposta"];
+
+const REGIME_OPTIONS = [
+  ["nao_sei", "Nao sei"],
+  ["simples", "Simples Nacional"],
+  ["lucro_presumido", "Lucro Presumido"],
+  ["lucro_real", "Lucro Real"],
+];
+
+const SETOR_OPTIONS = [
+  ["nao_sei", "Nao sei"],
+  ["servicos", "Servicos"],
+  ["comercio", "Comercio"],
+  ["industria", "Industria"],
+  ["misto", "Misto"],
+];
+
+const PORTE_OPTIONS = [
+  ["nao_sei", "Nao sei"],
+  ["mei", "MEI"],
+  ["me_epp", "ME/EPP"],
+  ["demais", "Demais"],
+];
+
+const YES_NO_OPTIONS = [
+  ["nao_sei", "Nao sei"],
+  ["sim", "Sim"],
+  ["nao", "Nao"],
+];
+
+const OBJECTIVE_OPTIONS = [
+  ["nao_sei", "Ainda nao definido"],
+  ["caixa", "Preservar caixa"],
+  ["certidao", "Recuperar certidao"],
+  ["divida", "Negociar divida"],
+  ["reforma", "Entender impacto da reforma"],
+  ["preco", "Revisar preco e margem"],
+];
+
 export function GuidedDiagnosticPage() {
   const navigate = useNavigate();
-  const [input, setInput] = useState<DiagnosticInput>(DEFAULT_INPUT);
-  const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
-  const [saveError, setSaveError] = useState<string | null>(null);
-  const [saveSuccess, setSaveSuccess] = useState(false);
+  const [form, setForm] = useState<DiagnosticInput>(INITIAL_INPUT);
+  const [errors, setErrors] = useState<FieldErrors>({});
   const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
-  const validation = useMemo(() => DiagnosticInputSchema.safeParse(input), [input]);
-  const result = useMemo<DiagnosticResult | null>(() => {
-    if (!validation.success) return null;
-    return calculateDiagnostic(validation.data);
-  }, [validation]);
+  const previewInput = useMemo<DiagnosticInput>(
+    () => ({
+      ...form,
+      nomeEmpresa: form.nomeEmpresa.trim() || "Empresa em analise",
+      cnpj: /^\d{14}$/.test(form.cnpj.replace(/\D/g, "")) ? form.cnpj : "",
+      faturamentoMensal: Math.max(1, Number(form.faturamentoMensal) || 1),
+      margemPercentual: Math.max(0, Number(form.margemPercentual) || 0),
+      percentualB2B: Math.max(0, Number(form.percentualB2B) || 0),
+      comprasCreditaveisPercentual: Math.max(0, Number(form.comprasCreditaveisPercentual) || 0),
+    }),
+    [form],
+  );
 
-  const missingInfo = useMemo(() => {
-    const schemaIssues = validation.success
-      ? []
-      : validation.error.issues.map((issue) => issue.message);
-    return Array.from(new Set([...schemaIssues, ...(result?.lacunasInformacao ?? [])]));
-  }, [result, validation]);
+  const liveResult = useMemo(() => calculateDiagnostic(previewInput), [previewInput]);
+  const totalDebt =
+    Number(form.valorDividaUniao ?? 0) +
+    Number(form.valorDividaEstado ?? 0) +
+    Number(form.valorDividaMunicipio ?? 0) +
+    Number(form.valorDividaOutros ?? 0);
 
   function update<K extends keyof DiagnosticInput>(key: K, value: DiagnosticInput[K]) {
-    setInput((current) => ({ ...current, [key]: value }));
-    setFieldErrors((current) => ({ ...current, [key]: undefined }));
-    setSaveError(null);
-    setSaveSuccess(false);
+    setForm((current) => ({ ...current, [key]: value }));
+    setErrors((current) => {
+      if (!current[key as string]) return current;
+      const next = { ...current };
+      delete next[key as string];
+      return next;
+    });
   }
 
   async function handleSave() {
-    const parsed = DiagnosticInputSchema.safeParse(input);
+    const parsed = DiagnosticInputSchema.safeParse(form);
     if (!parsed.success) {
       const nextErrors: FieldErrors = {};
       parsed.error.issues.forEach((issue) => {
-        const field = issue.path[0] as keyof DiagnosticInput | undefined;
-        if (field) nextErrors[field] = issue.message;
+        const key = String(issue.path[0] ?? "form");
+        if (!nextErrors[key]) nextErrors[key] = issue.message;
       });
-      setFieldErrors(nextErrors);
+      setErrors(nextErrors);
       setSaveError("Revise os campos destacados antes de salvar.");
       return;
     }
 
     setSaving(true);
     setSaveError(null);
-    setSaveSuccess(false);
     try {
-      const nextResult = calculateDiagnostic(parsed.data);
-      const record = await saveDiagnostic(parsed.data, nextResult);
-      setSaveSuccess(true);
+      const result = calculateDiagnostic(parsed.data);
+      const record = await saveDiagnostic(parsed.data, result);
       navigate(`/app/leads/${record.id}`);
     } catch (error) {
       setSaveError(error instanceof Error ? error.message : "Nao foi possivel salvar o diagnostico.");
@@ -99,256 +143,207 @@ export function GuidedDiagnosticPage() {
 
   return (
     <ProShell
-      title="Diagnostico Empresarial Guiado"
-      subtitle="Preencha as informacoes durante a reuniao. O diagnostico sera atualizado em tempo real."
+      title="Diagnostico empresarial guiado"
+      subtitle="Preenchimento orientado para reuniao, com score e diagnostico vivo enquanto os dados sao coletados."
     >
-      <StepBar />
+      <section className="rounded-lg border border-[#143a36] bg-[#102524] p-5 text-white shadow-panel">
+        <div className="flex flex-col gap-5 xl:flex-row xl:items-center xl:justify-between">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wide text-[#c9aa63]">Central Estrategica</p>
+            <h2 className="mt-2 text-2xl font-semibold md:text-3xl">Radar em tempo real para conversa consultiva</h2>
+            <p className="mt-2 max-w-3xl text-sm leading-6 text-white/70">
+              Colete os dados essenciais, acompanhe exposicao, risco e lacunas, e salve o caso direto na central de leads.
+            </p>
+          </div>
+          <div className="grid gap-2 rounded-lg border border-white/10 bg-white/[0.06] p-4 text-sm md:min-w-72">
+            <div className="flex items-center justify-between gap-3">
+              <span className="text-white/65">Passivo informado</span>
+              <strong>{formatCurrency(totalDebt)}</strong>
+            </div>
+            <div className="flex items-center justify-between gap-3">
+              <span className="text-white/65">RT-Score vivo</span>
+              <strong>{liveResult.score}</strong>
+            </div>
+          </div>
+        </div>
 
-      <div className="mt-6 grid gap-5 xl:grid-cols-[minmax(0,1fr)_420px]">
-        <form className="grid gap-4" onSubmit={(event) => event.preventDefault()}>
-          <FormSection title="Identificacao">
-            <TextField label="Nome da empresa" value={input.nomeEmpresa} error={fieldErrors.nomeEmpresa} onChange={(value) => update("nomeEmpresa", value)} />
-            <TextField label="Contato" value={input.contato} error={fieldErrors.contato} onChange={(value) => update("contato", value)} />
-            <TextField label="CNPJ" value={input.cnpj} error={fieldErrors.cnpj} onChange={(value) => update("cnpj", value)} />
+        <div className="mt-5 grid gap-2 md:grid-cols-4 xl:grid-cols-8">
+          {STEPS.map((step, index) => (
+            <div
+              key={step}
+              className={`rounded-md border px-3 py-2 text-sm ${
+                index <= 4 ? "border-[#c9aa63]/40 bg-white/[0.08] text-white" : "border-white/10 bg-white/[0.03] text-white/45"
+              }`}
+            >
+              <div className="flex items-center gap-2">
+                {index <= 4 ? <CheckCircle2 className="h-4 w-4 text-[#c9aa63]" /> : <span className="h-4 w-4 rounded-full border border-white/25" />}
+                <span className="font-semibold">{step}</span>
+              </div>
+              <p className="mt-1 text-xs text-white/50">{index <= 4 ? "Disponivel" : "Proxima etapa"}</p>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <div className="mt-6 grid gap-6 xl:grid-cols-[minmax(0,0.95fr)_minmax(520px,1.05fr)]">
+        <section className="grid gap-4">
+          <FormSection icon={Building2} title="Identificacao">
+            <TextField label="Nome da empresa" value={form.nomeEmpresa} onChange={(value) => update("nomeEmpresa", value)} error={errors.nomeEmpresa} />
+            <TextField label="Contato" value={form.contato ?? ""} onChange={(value) => update("contato", value)} error={errors.contato} />
+            <TextField label="CNPJ" value={form.cnpj ?? ""} onChange={(value) => update("cnpj", value)} error={errors.cnpj} placeholder="00.000.000/0000-00" />
           </FormSection>
 
-          <FormSection title="Perfil empresarial">
-            <SelectField label="Regime tributario" value={input.regimeTributario} error={fieldErrors.regimeTributario} onChange={(value) => update("regimeTributario", value as DiagnosticInput["regimeTributario"])}>
-              <option value="nao_sei">Nao sei</option>
-              <option value="simples">Simples Nacional</option>
-              <option value="presumido">Lucro Presumido</option>
-              <option value="real">Lucro Real</option>
-              <option value="mei">MEI</option>
-            </SelectField>
-            <SelectField label="Setor" value={input.setor} error={fieldErrors.setor} onChange={(value) => update("setor", value as DiagnosticInput["setor"])}>
-              <option value="nao_sei">Nao sei</option>
-              <option value="comercio">Comercio</option>
-              <option value="servicos">Servicos</option>
-              <option value="industria">Industria</option>
-              <option value="profissional">Profissional</option>
-              <option value="saude_educacao_agro">Saude, educacao ou agro</option>
-              <option value="imobiliario">Imobiliario</option>
-              <option value="financeiro">Financeiro</option>
-              <option value="seletivo">Seletivo</option>
-            </SelectField>
-            <SelectField label="Porte" value={input.porteEmpresa} error={fieldErrors.porteEmpresa} onChange={(value) => update("porteEmpresa", value as DiagnosticInput["porteEmpresa"])}>
-              <option value="nao_sei">Nao sei</option>
-              <option value="mei">MEI</option>
-              <option value="micro">Micro</option>
-              <option value="pequena">Pequena</option>
-              <option value="media">Media</option>
-              <option value="grande">Grande</option>
-            </SelectField>
-            <NumberField label="Numero de funcionarios" value={input.numeroFuncionarios} error={fieldErrors.numeroFuncionarios} onChange={(value) => update("numeroFuncionarios", value)} />
+          <FormSection icon={ShieldCheck} title="Perfil empresarial">
+            <SelectField label="Regime tributario" value={form.regimeTributario} options={REGIME_OPTIONS} onChange={(value) => update("regimeTributario", value as DiagnosticInput["regimeTributario"])} />
+            <SelectField label="Setor" value={form.setor} options={SETOR_OPTIONS} onChange={(value) => update("setor", value as DiagnosticInput["setor"])} />
+            <SelectField label="Porte" value={form.porteEmpresa} options={PORTE_OPTIONS} onChange={(value) => update("porteEmpresa", value as DiagnosticInput["porteEmpresa"])} />
+            <NumberField label="Numero de funcionarios" value={form.numeroFuncionarios ?? 0} onChange={(value) => update("numeroFuncionarios", value)} />
           </FormSection>
 
-          <FormSection title="Receita e operacao">
-            <MoneyInput label="Faturamento mensal" value={input.faturamentoMensal} onChange={(value) => update("faturamentoMensal", value)} />
-            <FieldError message={fieldErrors.faturamentoMensal} />
-            <NumberField label="Percentual B2B" suffix="%" value={input.percentualB2B} error={fieldErrors.percentualB2B} onChange={(value) => update("percentualB2B", value)} />
-            <NumberField label="Margem percentual" suffix="%" value={input.margemPercentual} error={fieldErrors.margemPercentual} onChange={(value) => update("margemPercentual", value)} />
-            <NumberField label="Compras creditaveis" suffix="%" value={input.comprasCreditaveisPercentual} error={fieldErrors.comprasCreditaveisPercentual} onChange={(value) => update("comprasCreditaveisPercentual", value)} />
-            <SelectField label="Possui cliente PJ relevante" value={input.possuiClientePjRelevante} error={fieldErrors.possuiClientePjRelevante} onChange={(value) => update("possuiClientePjRelevante", value as DiagnosticInput["possuiClientePjRelevante"])}>
-              <option value="nao_sei">Nao sei</option>
-              <option value="sim">Sim</option>
-              <option value="nao">Nao</option>
-            </SelectField>
-            <SelectField label="Sistema fiscal preparado" value={input.sistemaFiscalPreparado} error={fieldErrors.sistemaFiscalPreparado} onChange={(value) => update("sistemaFiscalPreparado", value as DiagnosticInput["sistemaFiscalPreparado"])}>
-              <option value="nao_sei">Nao sei</option>
-              <option value="sim">Sim</option>
-              <option value="parcial">Parcial</option>
-              <option value="nao">Nao</option>
-            </SelectField>
+          <FormSection icon={LineChart} title="Receita e operacao">
+            <MoneyInput label="Faturamento mensal" value={form.faturamentoMensal} onChange={(value) => update("faturamentoMensal", value)} />
+            <NumberField label="% B2B" value={form.percentualB2B} onChange={(value) => update("percentualB2B", value)} suffix="%" />
+            <NumberField label="Margem estimada" value={form.margemPercentual} onChange={(value) => update("margemPercentual", value)} suffix="%" />
+            <NumberField label="Compras creditaveis" value={form.comprasCreditaveisPercentual} onChange={(value) => update("comprasCreditaveisPercentual", value)} suffix="%" />
+            <SelectField label="Cliente PJ relevante" value={form.possuiClientePjRelevante} options={YES_NO_OPTIONS} onChange={(value) => update("possuiClientePjRelevante", value as DiagnosticInput["possuiClientePjRelevante"])} />
+            <SelectField label="Sistema fiscal preparado" value={form.sistemaFiscalPreparado} options={YES_NO_OPTIONS} onChange={(value) => update("sistemaFiscalPreparado", value as DiagnosticInput["sistemaFiscalPreparado"])} />
           </FormSection>
 
-          <FormSection title="Passivo e ativos">
-            <SelectField label="Possui divida fiscal" value={input.possuiDividaFiscal} error={fieldErrors.possuiDividaFiscal} onChange={(value) => update("possuiDividaFiscal", value as DiagnosticInput["possuiDividaFiscal"])}>
-              <option value="nao_sei">Nao sei</option>
-              <option value="sim">Sim</option>
-              <option value="nao">Nao</option>
-            </SelectField>
-            <MoneyInput label="Divida da Uniao" value={input.valorDividaUniao} onChange={(value) => update("valorDividaUniao", value)} />
-            <MoneyInput label="Divida estadual" value={input.valorDividaEstado} onChange={(value) => update("valorDividaEstado", value)} />
-            <MoneyInput label="Divida municipal" value={input.valorDividaMunicipio} onChange={(value) => update("valorDividaMunicipio", value)} />
-            <MoneyInput label="Outras dividas" value={input.valorDividaOutros} onChange={(value) => update("valorDividaOutros", value)} />
-            <SelectField label="Possui credito de ICMS" value={input.possuiCreditoIcms} error={fieldErrors.possuiCreditoIcms} onChange={(value) => update("possuiCreditoIcms", value as DiagnosticInput["possuiCreditoIcms"])}>
-              <option value="nao_sei">Nao sei</option>
-              <option value="sim">Sim</option>
-              <option value="nao">Nao</option>
-            </SelectField>
-            <MoneyInput label="Credito de ICMS estimado" value={input.valorCreditoIcmsEstimado} onChange={(value) => update("valorCreditoIcmsEstimado", value)} />
+          <FormSection icon={Landmark} title="Passivo e ativos">
+            <SelectField label="Possui divida fiscal" value={form.possuiDividaFiscal} options={YES_NO_OPTIONS} onChange={(value) => update("possuiDividaFiscal", value as DiagnosticInput["possuiDividaFiscal"])} />
+            <MoneyInput label="Divida Uniao / RFB / PGFN" value={form.valorDividaUniao ?? 0} onChange={(value) => update("valorDividaUniao", value)} />
+            <MoneyInput label="Divida Estado" value={form.valorDividaEstado ?? 0} onChange={(value) => update("valorDividaEstado", value)} />
+            <MoneyInput label="Divida Municipio" value={form.valorDividaMunicipio ?? 0} onChange={(value) => update("valorDividaMunicipio", value)} />
+            <MoneyInput label="Outros debitos" value={form.valorDividaOutros ?? 0} onChange={(value) => update("valorDividaOutros", value)} />
+            <SelectField label="Possui credito ICMS" value={form.possuiCreditoIcms} options={YES_NO_OPTIONS} onChange={(value) => update("possuiCreditoIcms", value as DiagnosticInput["possuiCreditoIcms"])} />
+            <MoneyInput label="Credito ICMS estimado" value={form.valorCreditoIcmsEstimado ?? 0} onChange={(value) => update("valorCreditoIcmsEstimado", value)} />
           </FormSection>
 
-          <FormSection title="Objetivo">
-            <SelectField label="Objetivo principal do cliente" value={input.objetivoCliente} error={fieldErrors.objetivoCliente} onChange={(value) => update("objetivoCliente", value as DiagnosticInput["objetivoCliente"])}>
-              <option value="nao_sei">Nao sei</option>
-              <option value="caixa">Caixa</option>
-              <option value="imposto_alto">Imposto alto</option>
-              <option value="certidao">Certidao</option>
-              <option value="divida">Divida</option>
-              <option value="clientes_pj">Clientes PJ</option>
-            </SelectField>
-          </FormSection>
-
-          <div className="flex flex-wrap items-center gap-3 rounded-lg border border-neutral-200 bg-white p-4 shadow-sm">
+          <FormSection icon={ArrowRight} title="Objetivo">
+            <SelectField label="Objetivo principal do cliente" value={form.objetivoCliente} options={OBJECTIVE_OPTIONS} onChange={(value) => update("objetivoCliente", value as DiagnosticInput["objetivoCliente"])} />
+            {saveError && <p className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700">{saveError}</p>}
             <button
               type="button"
               onClick={handleSave}
               disabled={saving}
-              className="inline-flex min-h-11 items-center gap-2 rounded-md bg-petroleum-700 px-4 text-sm font-semibold text-white hover:bg-petroleum-900 disabled:cursor-not-allowed disabled:opacity-60"
+              className="inline-flex min-h-11 items-center justify-center gap-2 rounded-md bg-petroleum-700 px-4 text-sm font-semibold text-white transition hover:bg-petroleum-900 disabled:cursor-not-allowed disabled:opacity-60"
             >
               <Save className="h-4 w-4" />
-              {saving ? "Salvando..." : "Salvar e continuar"}
+              {saving ? "SALVANDO..." : "SALVAR E CONTINUAR"}
             </button>
-            {saveSuccess && <StatusMessage tone="success" text="Diagnostico salvo. Abrindo ficha do cliente." />}
-            {saveError && <StatusMessage tone="error" text={saveError} />}
-          </div>
-        </form>
+          </FormSection>
+        </section>
 
-        <LiveDiagnostic result={result} missingInfo={missingInfo} />
+        <aside className="xl:sticky xl:top-6 xl:self-start">
+          <ResultPanel input={previewInput} result={liveResult} readOnly />
+        </aside>
       </div>
     </ProShell>
   );
 }
 
-function StepBar() {
-  return (
-    <div className="overflow-hidden rounded-lg border border-neutral-200 bg-white p-3 shadow-sm">
-      <div className="grid gap-2 sm:grid-cols-4 xl:grid-cols-8">
-        {STEPS.map((step, index) => {
-          const active = index <= 2 || step === "Passivo";
-          return (
-            <div key={step} className={`rounded-md border px-3 py-2 ${active ? "border-petroleum-200 bg-petroleum-50" : "border-neutral-200 bg-neutral-50"}`}>
-              <p className={`text-xs font-semibold ${active ? "text-petroleum-800" : "text-neutral-400"}`}>{index + 1}. {step}</p>
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
-function LiveDiagnostic({ result, missingInfo }: { result: DiagnosticResult | null; missingInfo: string[] }) {
-  return (
-    <aside className="h-fit rounded-lg border border-[#173b37] bg-[#102524] p-5 text-white shadow-panel xl:sticky xl:top-5">
-      <div className="flex items-center justify-between gap-3">
-        <div>
-          <p className="text-xs font-semibold uppercase text-[#c9aa63]">Diagnostico vivo</p>
-          <h2 className="mt-1 text-xl font-semibold">Leitura executiva</h2>
-        </div>
-        <ShieldCheck className="h-6 w-6 text-[#c9aa63]" />
-      </div>
-
-      {result ? (
-        <>
-          <div className="mt-5 grid grid-cols-2 gap-3">
-            <DarkMetric label="Score" value={`${result.score}/100`} />
-            <DarkMetric label="Risco" value={result.nivel} />
-            <DarkMetric label="Exposicao minima" value={formatCurrency(result.exposicaoMin)} />
-            <DarkMetric label="Exposicao maxima" value={formatCurrency(result.exposicaoMax)} />
-            <DarkMetric label="Preco da inacao" value={`${formatCurrency(result.precoInacaoMin)} a ${formatCurrency(result.precoInacaoMax)}`} wide />
-            <DarkMetric label="Pressao B2B" value={result.pressaoB2B} />
-          </div>
-
-          <div className="mt-5 rounded-md border border-white/10 bg-white/[0.06] p-4">
-            <p className="text-xs font-semibold uppercase text-white/55">Proximo passo recomendado</p>
-            <p className="mt-2 text-sm font-semibold leading-6 text-white">{result.proximoPasso}</p>
-          </div>
-
-          <DarkList title="Principais oportunidades" items={result.oportunidades} tone="good" />
-          <DarkList title="Principais ameacas" items={result.ameacas} tone="risk" />
-        </>
-      ) : (
-        <div className="mt-5 rounded-md border border-amber-300/30 bg-amber-300/10 p-4 text-sm leading-6 text-amber-50">
-          Informe os campos obrigatorios para liberar score, risco e exposicao calculados pelo motor real.
-        </div>
-      )}
-
-      <DarkList title="Informacoes ainda ausentes" items={missingInfo.length ? missingInfo : ["Sem lacunas obrigatorias no momento."]} tone="neutral" />
-    </aside>
-  );
-}
-
-function FormSection({ title, children }: { title: string; children: React.ReactNode }) {
+function FormSection({
+  icon: Icon,
+  title,
+  children,
+}: {
+  icon: typeof Building2;
+  title: string;
+  children: React.ReactNode;
+}) {
   return (
     <section className="rounded-lg border border-neutral-200 bg-white p-4 shadow-sm">
-      <h2 className="text-sm font-semibold uppercase text-petroleum-800">{title}</h2>
-      <div className="mt-4 grid gap-4 md:grid-cols-2">{children}</div>
+      <div className="mb-4 flex items-center gap-2">
+        <span className="grid h-9 w-9 place-items-center rounded-md bg-petroleum-50 text-petroleum-800">
+          <Icon className="h-4 w-4" />
+        </span>
+        <h3 className="text-base font-semibold text-ink">{title}</h3>
+      </div>
+      <div className="grid gap-4 md:grid-cols-2">{children}</div>
     </section>
   );
 }
 
-function TextField({ label, value, error, onChange }: { label: string; value: string; error?: string; onChange: (value: string) => void }) {
+function TextField({
+  label,
+  value,
+  onChange,
+  error,
+  placeholder,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  error?: string;
+  placeholder?: string;
+}) {
   return (
     <label className="block text-xs font-semibold uppercase text-neutral-500">
       {label}
-      <input value={value} onChange={(event) => onChange(event.target.value)} className="mt-1 min-h-10 w-full rounded-md border border-neutral-300 bg-white px-3 text-sm text-ink outline-none focus:border-petroleum-500" />
-      <FieldError message={error} />
+      <input
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        placeholder={placeholder}
+        className="mt-1 min-h-10 w-full rounded-md border border-neutral-300 bg-white px-3 text-sm normal-case text-ink outline-none focus:border-petroleum-500"
+      />
+      {error && <span className="mt-1 block text-xs normal-case text-red-600">{error}</span>}
     </label>
   );
 }
 
-function NumberField({ label, value, error, suffix, onChange }: { label: string; value: number; error?: string; suffix?: string; onChange: (value: number) => void }) {
+function NumberField({
+  label,
+  value,
+  onChange,
+  suffix,
+}: {
+  label: string;
+  value: number;
+  onChange: (value: number) => void;
+  suffix?: string;
+}) {
   return (
     <label className="block text-xs font-semibold uppercase text-neutral-500">
       {label}
-      <div className="mt-1 flex min-h-10 items-center rounded-md border border-neutral-300 bg-white focus-within:border-petroleum-500">
-        <input type="number" min={0} value={value} onChange={(event) => onChange(Number(event.target.value))} className="w-full border-0 bg-transparent px-3 text-sm text-ink outline-none" />
-        {suffix ? <span className="pr-3 text-sm text-neutral-500">{suffix}</span> : null}
+      <div className="mt-1 flex min-h-10 items-center rounded-md border border-neutral-300 bg-white px-3 focus-within:border-petroleum-500">
+        <input
+          type="number"
+          min={0}
+          value={Number.isFinite(value) ? value : 0}
+          onChange={(event) => onChange(Math.max(0, Number(event.target.value) || 0))}
+          className="w-full border-0 bg-transparent text-sm text-ink outline-none"
+        />
+        {suffix && <span className="text-sm font-semibold text-neutral-500">{suffix}</span>}
       </div>
-      <FieldError message={error} />
     </label>
   );
 }
 
-function SelectField({ label, value, error, onChange, children }: { label: string; value: string; error?: string; onChange: (value: string) => void; children: React.ReactNode }) {
+function SelectField({
+  label,
+  value,
+  options,
+  onChange,
+}: {
+  label: string;
+  value: string;
+  options: string[][];
+  onChange: (value: string) => void;
+}) {
   return (
     <label className="block text-xs font-semibold uppercase text-neutral-500">
       {label}
-      <select value={value} onChange={(event) => onChange(event.target.value)} className="mt-1 min-h-10 w-full rounded-md border border-neutral-300 bg-white px-3 text-sm text-ink outline-none focus:border-petroleum-500">
-        {children}
-      </select>
-      <FieldError message={error} />
-    </label>
-  );
-}
-
-function FieldError({ message }: { message?: string }) {
-  return message ? <span className="mt-1 block text-xs font-semibold normal-case text-red-600">{message}</span> : null;
-}
-
-function StatusMessage({ tone, text }: { tone: "success" | "error"; text: string }) {
-  const Icon = tone === "success" ? CheckCircle2 : AlertTriangle;
-  return (
-    <span className={`inline-flex items-center gap-2 text-sm font-semibold ${tone === "success" ? "text-emerald-700" : "text-red-700"}`}>
-      <Icon className="h-4 w-4" />
-      {text}
-    </span>
-  );
-}
-
-function DarkMetric({ label, value, wide = false }: { label: string; value: string; wide?: boolean }) {
-  return (
-    <div className={`rounded-md border border-white/10 bg-white/[0.06] p-3 ${wide ? "col-span-2" : ""}`}>
-      <p className="text-xs font-semibold uppercase text-white/50">{label}</p>
-      <p className="mt-2 text-xl font-semibold leading-tight text-white">{value}</p>
-    </div>
-  );
-}
-
-function DarkList({ title, items, tone }: { title: string; items: string[]; tone: "good" | "risk" | "neutral" }) {
-  const color = tone === "good" ? "bg-emerald-400" : tone === "risk" ? "bg-red-400" : "bg-white/50";
-  return (
-    <div className="mt-5">
-      <p className="text-xs font-semibold uppercase text-white/55">{title}</p>
-      <ul className="mt-3 grid gap-2 text-sm leading-6 text-white/82">
-        {items.slice(0, 5).map((item) => (
-          <li key={item} className="flex gap-2">
-            <span className={`mt-2 h-1.5 w-1.5 shrink-0 rounded-full ${color}`} />
-            <span>{item}</span>
-          </li>
+      <select
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        className="mt-1 min-h-10 w-full rounded-md border border-neutral-300 bg-white px-3 text-sm normal-case text-ink outline-none focus:border-petroleum-500"
+      >
+        {options.map(([optionValue, optionLabel]) => (
+          <option key={optionValue} value={optionValue}>
+            {optionLabel}
+          </option>
         ))}
-      </ul>
-    </div>
+      </select>
+    </label>
   );
 }
