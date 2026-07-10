@@ -150,34 +150,32 @@ export const DEBT_NATURES: { key: DebtNatureKey; label: string }[] = [
   { key: "demais", label: "Demais Débitos" },
 ];
 
-const money = (value: number) => (Number.isFinite(value) ? Math.max(0, value) : 0);
+const safe = (value: number) => (Number.isFinite(value) ? Math.max(0, value) : 0);
 const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, Number.isFinite(value) ? value : min));
-const isFavored = (size: CompanySize) => size === "mei" || size === "me" || size === "epp";
-const minimumPgfnInstallment = (size: CompanySize) => size === "mei" ? PASSIVO_RULES.pgfn.minimumInstallmentMei : PASSIVO_RULES.pgfn.minimumInstallmentOther;
-const capForProfile = (size: CompanySize) => isFavored(size) ? PASSIVO_RULES.pgfn.discountCapFavored : PASSIVO_RULES.pgfn.discountCapGeneral;
+const favored = (size: CompanySize) => size === "mei" || size === "me" || size === "epp";
+const pgfnMinimum = (size: CompanySize) => size === "mei" ? PASSIVO_RULES.pgfn.minimumInstallmentMei : PASSIVO_RULES.pgfn.minimumInstallmentOther;
+const discountCap = (size: CompanySize) => favored(size) ? PASSIVO_RULES.pgfn.discountCapFavored : PASSIVO_RULES.pgfn.discountCapGeneral;
 
 export function getProfilePlanDefaults(size: CompanySize, key: DebtNatureKey) {
-  const favored = isFavored(size);
-  const entryInstallments = favored ? PASSIVO_RULES.pgfn.entryInstallmentsFavored : PASSIVO_RULES.pgfn.entryInstallmentsGeneral;
+  const entryInstallments = favored(size) ? PASSIVO_RULES.pgfn.entryInstallmentsFavored : PASSIVO_RULES.pgfn.entryInstallmentsGeneral;
+  const balanceMonths = favored(size) ? PASSIVO_RULES.pgfn.balanceMonthsFavored : PASSIVO_RULES.pgfn.balanceMonthsGeneral;
   return {
     entryPercent: PASSIVO_RULES.pgfn.entryPercent,
     entryInstallments,
-    totalMonths: key === "previdenciaria"
-      ? PASSIVO_RULES.pgfn.socialSecurityTotalMonths
-      : entryInstallments + (favored ? PASSIVO_RULES.pgfn.balanceMonthsFavored : PASSIVO_RULES.pgfn.balanceMonthsGeneral),
+    totalMonths: key === "previdenciaria" ? PASSIVO_RULES.pgfn.socialSecurityTotalMonths : entryInstallments + balanceMonths,
   };
 }
 
 export function createDefaultPassivoInput(): PassivoSimulatorInput {
   const nature = (key: DebtNatureKey): NatureParameters => {
-    const defaults = getProfilePlanDefaults("demais", key);
+    const plan = getProfilePlanDefaults("demais", key);
     return {
       amount: 0,
       reducibleBasePercent: 60,
       discountPercent: 35,
-      entryPercent: defaults.entryPercent,
-      entryInstallments: defaults.entryInstallments,
-      totalMonths: defaults.totalMonths,
+      entryPercent: plan.entryPercent,
+      entryInstallments: plan.entryInstallments,
+      totalMonths: plan.totalMonths,
     };
   };
   return {
@@ -204,39 +202,46 @@ export function createDefaultPassivoInput(): PassivoSimulatorInput {
   };
 }
 
-function fitInstallments(amount: number, requested: number, minimum: number) {
-  const safe = money(amount);
-  if (safe <= 0) return { installments: 0, installmentValue: 0 };
-  const requestedSafe = Math.max(1, Math.round(requested || 1));
-  const maximum = Math.max(1, Math.floor(safe / Math.max(1, minimum)));
-  const installments = Math.min(requestedSafe, maximum);
-  return { installments, installmentValue: safe / installments };
+function fit(amount: number, requested: number, minimum: number) {
+  const total = safe(amount);
+  if (total <= 0) return { installments: 0, value: 0 };
+  const desired = Math.max(1, Math.round(requested || 1));
+  const maximum = Math.max(1, Math.floor(total / Math.max(1, minimum)));
+  const installments = Math.min(desired, maximum);
+  return { installments, value: total / installments };
 }
 
-function resolveMode(input: PassivoSimulatorInput, total: number): ResolvedMode {
-  if (total <= 0) return "sem_divida";
+function resolveMode(input: PassivoSimulatorInput, pgfnTotal: number): ResolvedMode {
+  if (pgfnTotal <= 0) return "sem_divida";
   if (input.mode !== "automatico") return input.mode;
-  if (total > PASSIVO_RULES.tis.minimumExclusive && total < PASSIVO_RULES.tis.maximumExclusive) return "tis";
-  if (total <= PASSIVO_RULES.pgfn.adhesionLimit) return "capag";
+  if (pgfnTotal > PASSIVO_RULES.tis.minimumExclusive && pgfnTotal < PASSIVO_RULES.tis.maximumExclusive) return "tis";
+  if (pgfnTotal <= PASSIVO_RULES.pgfn.adhesionLimit) return "capag";
   return "individual";
 }
 
 function modeLabel(mode: ResolvedMode) {
-  return ({
+  const labels: Record<ResolvedMode, string> = {
     sem_divida: "Sem dívida PGFN informada",
     capag: "Transação por capacidade de pagamento",
     tis: "Transação Individual Simplificada (TIS)",
     ordinario: "Parcelamento ordinário",
     individual: "Negociação individual / análise manual",
-  } as Record<ResolvedMode, string>)[mode];
+  };
+  return labels[mode];
 }
 
-function calculateNature(key: DebtNatureKey, source: NatureParameters, mode: ResolvedMode, input: PassivoSimulatorInput, scenario: "atual" | "atingivel"): NatureCalculation {
-  const original = money(source.amount);
-  const minimumInstallment = minimumPgfnInstallment(input.companySize);
+function natureCalculation(
+  key: DebtNatureKey,
+  source: NatureParameters,
+  mode: ResolvedMode,
+  input: PassivoSimulatorInput,
+  scenario: "atual" | "atingivel",
+): NatureCalculation {
+  const original = safe(source.amount);
+  const minimumInstallment = pgfnMinimum(input.companySize);
   let entryPercent = 0;
-  let entryInstallments = 1;
-  let totalMonths = key === "previdenciaria" ? PASSIVO_RULES.pgfn.socialSecurityTotalMonths : 60;
+  let entryInstallments = 0;
+  let totalMonths: number = key === "previdenciaria" ? PASSIVO_RULES.pgfn.socialSecurityTotalMonths : 60;
   let discountPercent = 0;
   let reducibleBasePercent = 0;
 
@@ -246,9 +251,9 @@ function calculateNature(key: DebtNatureKey, source: NatureParameters, mode: Res
       entryPercent = input.advancedOverrides ? source.entryPercent : defaults.entryPercent;
       entryInstallments = input.advancedOverrides ? source.entryInstallments : defaults.entryInstallments;
       totalMonths = input.advancedOverrides ? source.totalMonths : defaults.totalMonths;
-      const discountAllowed = input.capag === "C" || input.capag === "D" || input.simulateStrategicReview;
-      discountPercent = discountAllowed ? source.discountPercent : 0;
-      reducibleBasePercent = discountAllowed ? source.reducibleBasePercent : 0;
+      const projectedReduction = input.capag === "C" || input.capag === "D" || input.simulateStrategicReview;
+      discountPercent = projectedReduction ? source.discountPercent : 0;
+      reducibleBasePercent = projectedReduction ? source.reducibleBasePercent : 0;
     } else if (mode === "tis") {
       entryPercent = input.advancedOverrides ? source.entryPercent : PASSIVO_RULES.tis.productDefaultEntryPercent;
       entryInstallments = input.advancedOverrides ? source.entryInstallments : PASSIVO_RULES.tis.productDefaultEntryInstallments;
@@ -266,18 +271,18 @@ function calculateNature(key: DebtNatureKey, source: NatureParameters, mode: Res
 
   if (key === "previdenciaria") totalMonths = Math.min(totalMonths, PASSIVO_RULES.pgfn.socialSecurityTotalMonths);
   entryPercent = clamp(entryPercent, 0, 100);
-  discountPercent = clamp(discountPercent, 0, capForProfile(input.companySize));
-  reducibleBasePercent = clamp(reducibleBasePercent, 0, 100);
-  entryInstallments = Math.max(1, Math.round(entryInstallments || 1));
+  entryInstallments = entryPercent > 0 ? Math.max(1, Math.round(entryInstallments || 1)) : 0;
   totalMonths = Math.max(entryInstallments + 1, Math.round(totalMonths || 60));
+  discountPercent = clamp(discountPercent, 0, discountCap(input.companySize));
+  reducibleBasePercent = clamp(reducibleBasePercent, 0, 100);
 
   const entryTotal = original * (entryPercent / 100);
-  const fittedEntry = fitInstallments(entryTotal, entryInstallments, minimumInstallment);
+  const entryPlan = fit(entryTotal, entryInstallments, minimumInstallment);
   const afterEntry = Math.max(0, original - entryTotal);
   const reducibleBase = Math.min(afterEntry, original * (reducibleBasePercent / 100));
   const reduction = Math.min(afterEntry, reducibleBase * (discountPercent / 100));
   const balance = Math.max(0, afterEntry - reduction);
-  const fittedBalance = fitInstallments(balance, Math.max(1, totalMonths - fittedEntry.installments), minimumInstallment);
+  const balancePlan = fit(balance, Math.max(1, totalMonths - entryPlan.installments), minimumInstallment);
 
   return {
     key,
@@ -288,23 +293,28 @@ function calculateNature(key: DebtNatureKey, source: NatureParameters, mode: Res
     reduction,
     entryPercent,
     entryTotal,
-    entryInstallments: fittedEntry.installments,
-    entryInstallmentValue: fittedEntry.installmentValue,
+    entryInstallments: entryPlan.installments,
+    entryInstallmentValue: entryPlan.value,
     balance,
-    balanceMonths: fittedBalance.installments,
-    balanceInstallmentValue: fittedBalance.installmentValue,
-    totalMonths: fittedEntry.installments + fittedBalance.installments,
+    balanceMonths: balancePlan.installments,
+    balanceInstallmentValue: balancePlan.value,
+    totalMonths: entryPlan.installments + balancePlan.installments,
     totalNegotiated: entryTotal + balance,
     minimumInstallment,
   };
 }
 
-function aggregateScenario(id: "atual" | "atingivel", title: string, subtitle: string, mode: ResolvedMode, natureResults: NatureCalculation[]): ScenarioCalculation {
+function aggregate(
+  id: "atual" | "atingivel",
+  title: string,
+  subtitle: string,
+  mode: ResolvedMode,
+  natureResults: NatureCalculation[],
+): ScenarioCalculation {
   const original = natureResults.reduce((sum, item) => sum + item.original, 0);
   const reduction = natureResults.reduce((sum, item) => sum + item.reduction, 0);
   const entryTotal = natureResults.reduce((sum, item) => sum + item.entryTotal, 0);
   const balance = natureResults.reduce((sum, item) => sum + item.balance, 0);
-  const entryInstallments = natureResults.some((item) => item.entryTotal > 0) ? Math.max(...natureResults.map((item) => item.entryInstallments)) : 0;
   return {
     id,
     title,
@@ -315,62 +325,106 @@ function aggregateScenario(id: "atual" | "atingivel", title: string, subtitle: s
     reduction,
     entryTotal,
     entryInstallmentValue: natureResults.reduce((sum, item) => sum + item.entryInstallmentValue, 0),
-    entryInstallments,
+    entryInstallments: natureResults.some((item) => item.entryInstallments > 0) ? Math.max(...natureResults.map((item) => item.entryInstallments)) : 0,
     balance,
-    balanceMonths: natureResults.length ? Math.max(...natureResults.map((item) => item.balanceMonths)) : 0,
+    balanceMonths: natureResults.some((item) => item.balanceMonths > 0) ? Math.max(...natureResults.map((item) => item.balanceMonths)) : 0,
     averageBalanceInstallment: natureResults.reduce((sum, item) => sum + item.balanceInstallmentValue, 0),
     totalNegotiated: natureResults.reduce((sum, item) => sum + item.totalNegotiated, 0),
     savingsPercent: original > 0 ? (reduction / original) * 100 : 0,
   };
 }
 
-function calculateRfb(input: PassivoSimulatorInput): RfbCalculation {
-  const original = money(input.rfbAmount);
+function rfbCalculation(input: PassivoSimulatorInput): RfbCalculation {
+  const original = safe(input.rfbAmount);
   const minimumInstallment = PASSIVO_RULES.rfb.minimumInstallmentPj;
   const requested = Math.min(PASSIVO_RULES.rfb.maximumInstallments, Math.max(1, Math.round(input.rfbInstallments || 60)));
   let firstInstallmentPercent = 0;
-  let note = "Parcelamento inicial: a primeira prestação é normal e não representa entrada extraordinária.";
+  let note = "Parcelamento inicial: a primeira prestação é normal, sem entrada extraordinária.";
   if (input.rfbSituation === "primeiro_reparcelamento") {
-    firstInstallmentPercent = 10;
-    note = "Primeiro reparcelamento: primeira prestação correspondente a 10% do total consolidado.";
+    firstInstallmentPercent = PASSIVO_RULES.rfb.firstReparcelFirstInstallmentPercent;
+    note = "Primeiro reparcelamento: a primeira prestação corresponde a 10% do total consolidado.";
   } else if (input.rfbSituation === "reparcelamento_anterior") {
-    firstInstallmentPercent = 20;
-    note = "Novo reparcelamento com histórico anterior: primeira prestação correspondente a 20% do total consolidado.";
+    firstInstallmentPercent = PASSIVO_RULES.rfb.subsequentReparcelFirstInstallmentPercent;
+    note = "Reparcelamento com histórico anterior: a primeira prestação corresponde a 20% do total consolidado.";
   } else if (input.rfbSituation === "nao_sei") {
     note = "Histórico não informado: confirmar no e-CAC se a primeira prestação será normal, 10% ou 20%.";
   }
-  if (original <= 0) return { original: 0, situation: input.rfbSituation, firstInstallmentPercent, firstInstallment: 0, balance: 0, balanceInstallments: 0, balanceInstallmentValue: 0, totalInstallments: 0, minimumInstallment, totalNominal: 0, note };
-  if (firstInstallmentPercent === 0) {
-    const fitted = fitInstallments(original, requested, minimumInstallment);
-    return { original, situation: input.rfbSituation, firstInstallmentPercent: 0, firstInstallment: fitted.installmentValue, balance: original, balanceInstallments: fitted.installments, balanceInstallmentValue: fitted.installmentValue, totalInstallments: fitted.installments, minimumInstallment, totalNominal: original, note };
+
+  if (original <= 0) {
+    return { original: 0, situation: input.rfbSituation, firstInstallmentPercent, firstInstallment: 0, balance: 0, balanceInstallments: 0, balanceInstallmentValue: 0, totalInstallments: 0, minimumInstallment, totalNominal: 0, note };
   }
+
+  if (firstInstallmentPercent === 0) {
+    const plan = fit(original, requested, minimumInstallment);
+    const firstInstallment = plan.value;
+    const balance = Math.max(0, original - firstInstallment);
+    return {
+      original,
+      situation: input.rfbSituation,
+      firstInstallmentPercent: 0,
+      firstInstallment,
+      balance,
+      balanceInstallments: Math.max(0, plan.installments - 1),
+      balanceInstallmentValue: plan.installments > 1 ? plan.value : 0,
+      totalInstallments: plan.installments,
+      minimumInstallment,
+      totalNominal: original,
+      note,
+    };
+  }
+
   const firstInstallment = original * (firstInstallmentPercent / 100);
-  const balance = original - firstInstallment;
-  const fitted = fitInstallments(balance, Math.max(1, requested - 1), minimumInstallment);
-  return { original, situation: input.rfbSituation, firstInstallmentPercent, firstInstallment, balance, balanceInstallments: fitted.installments, balanceInstallmentValue: fitted.installmentValue, totalInstallments: 1 + fitted.installments, minimumInstallment, totalNominal: original, note };
+  const balance = Math.max(0, original - firstInstallment);
+  const plan = fit(balance, Math.max(1, requested - 1), minimumInstallment);
+  return {
+    original,
+    situation: input.rfbSituation,
+    firstInstallmentPercent,
+    firstInstallment,
+    balance,
+    balanceInstallments: plan.installments,
+    balanceInstallmentValue: plan.value,
+    totalInstallments: 1 + plan.installments,
+    minimumInstallment,
+    totalNominal: original,
+    note,
+  };
 }
 
 export function calculatePassivoSimulation(input: PassivoSimulatorInput): PassivoSimulatorResult {
-  const pgfnTotal = DEBT_NATURES.reduce((sum, nature) => sum + money(input.pgfn[nature.key].amount), 0);
+  const pgfnTotal = DEBT_NATURES.reduce((sum, nature) => sum + safe(input.pgfn[nature.key].amount), 0);
   const resolvedMode = resolveMode(input, pgfnTotal);
-  const currentScenario = aggregateScenario("atual", "Cenário atual", "Regularização sem redução automática", "ordinario", DEBT_NATURES.map((nature) => calculateNature(nature.key, input.pgfn[nature.key], "ordinario", input, "atual")));
-  const attainableScenario = aggregateScenario("atingivel", "Cenário atingível", modeLabel(resolvedMode), resolvedMode, DEBT_NATURES.map((nature) => calculateNature(nature.key, input.pgfn[nature.key], resolvedMode, input, "atingivel")));
-  const rfb = calculateRfb(input);
+  const currentScenario = aggregate(
+    "atual",
+    "Cenário atual",
+    "Regularização sem redução automática",
+    "ordinario",
+    DEBT_NATURES.map((nature) => natureCalculation(nature.key, input.pgfn[nature.key], "ordinario", input, "atual")),
+  );
+  const attainableScenario = aggregate(
+    "atingivel",
+    "Cenário atingível",
+    modeLabel(resolvedMode),
+    resolvedMode,
+    DEBT_NATURES.map((nature) => natureCalculation(nature.key, input.pgfn[nature.key], resolvedMode, input, "atingivel")),
+  );
+  const rfb = rfbCalculation(input);
   const potentialSavings = Math.max(0, currentScenario.totalNegotiated - attainableScenario.totalNegotiated);
   const tisEligible = pgfnTotal > PASSIVO_RULES.tis.minimumExclusive && pgfnTotal < PASSIVO_RULES.tis.maximumExclusive;
   const requiresTwoStepStrategy = input.impediment === "sim" || ((input.capag === "A" || input.capag === "B" || input.capag === "nao_informada") && attainableScenario.reduction > 0);
-  const guaranteeCoverage = attainableScenario.balance;
   const guaranteeAnnualCostPercent = clamp(input.guaranteeAnnualCostPercent, 0, 100);
   const alerts: string[] = [];
+
   if (input.impediment === "sim") alerts.push("Transação indisponível no cenário atual informado. Avaliar regularização possível e estratégia em duas etapas.");
-  if (input.executionActive === "sim") alerts.push("Execução fiscal ativa: priorizar análise de regularização, garantia e risco processual.");
+  if (input.executionActive === "sim") alerts.push("Execução fiscal ativa: priorizar regularização, garantia e leitura processual.");
   if (input.seizureIdentified === "sim") alerts.push("Bloqueio ou penhora informado: tratamento interno crítico e revisão imediata das medidas disponíveis.");
-  if (input.capag === "A" || input.capag === "B") alerts.push("CAPAG A/B não recebe desconto automático no cenário atual; eventual redução exibida depende de revisão ou nova elegibilidade.");
-  if (input.capag === "nao_informada") alerts.push("CAPAG não informada: confirmar no REGULARIZE antes de validar redução ou modalidade.");
+  if (input.capag === "A" || input.capag === "B") alerts.push("CAPAG A/B não recebe desconto automático no cenário atual; redução projetada depende de revisão ou nova elegibilidade.");
+  if (input.capag === "nao_informada") alerts.push("CAPAG não informada: confirmar no REGULARIZE antes de validar desconto ou modalidade.");
   if (resolvedMode === "individual") alerts.push("Valor acima do limite de adesão automática utilizado no motor. Encaminhar para negociação individual e análise manual.");
-  if (pgfnTotal > 0 && pgfnTotal <= PASSIVO_RULES.smallValue.operationalScreeningThreshold) alerts.push("Faixa operacional de pequeno valor identificada. Confirmar perfil, data de inscrição, natureza e edital vigente antes de enquadrar.");
-  if (input.rfbAmount > 0) alerts.push("RFB é calculada separadamente e não compõe os totais de redução da PGFN.");
-  alerts.push("Valores nominais antes da atualização pela Selic. A simulação não substitui SISPAR, REGULARIZE, e-CAC ou análise documental.");
+  if (pgfnTotal > 0 && pgfnTotal <= PASSIVO_RULES.smallValue.operationalScreeningThreshold) alerts.push("Faixa operacional de pequeno valor identificada. Confirmar perfil, data de inscrição, natureza e edital vigente.");
+  if (rfb.original > 0) alerts.push("RFB calculada separadamente; seus valores não compõem a redução da PGFN.");
+  alerts.push("Valores nominais antes da atualização pela Selic. Validar no SISPAR, REGULARIZE, e-CAC e documentos do caso.");
+
   return {
     resolvedMode,
     resolvedModeLabel: modeLabel(resolvedMode),
@@ -384,15 +438,17 @@ export function calculatePassivoSimulation(input: PassivoSimulatorInput): Passiv
     potentialSavings,
     potentialSavingsPercent: currentScenario.original > 0 ? (potentialSavings / currentScenario.original) * 100 : 0,
     guarantee: {
-      suggestedCoverage: guaranteeCoverage,
+      suggestedCoverage: attainableScenario.balance,
       annualCostPercent: guaranteeAnnualCostPercent,
-      estimatedAnnualCost: guaranteeCoverage * (guaranteeAnnualCostPercent / 100),
-      note: "Estimativa comercial separada da redução da dívida; custo real depende do tipo de garantia e da análise do garantidor.",
+      estimatedAnnualCost: attainableScenario.balance * (guaranteeAnnualCostPercent / 100),
+      note: "Estimativa comercial separada da redução da dívida; o custo real depende do tipo de garantia e da análise do garantidor.",
     },
     tis: {
       valueRangeEligible: tisEligible,
       statusLabel: tisEligible ? "Faixa de valor atendida" : "Fora da faixa automática de valor",
-      note: tisEligible ? "A faixa de valor é compatível; capacidade de pagamento, impedimentos, documentação, garantias e aceitação ainda precisam ser validados." : "A TIS exige valor consolidado superior a R$ 1 milhão e inferior a R$ 10 milhões, além dos demais critérios.",
+      note: tisEligible
+        ? "A faixa de valor é compatível; capacidade de pagamento, impedimentos, documentos, garantias e aceitação ainda precisam ser validados."
+        : "A TIS exige valor consolidado superior a R$ 1 milhão e inferior a R$ 10 milhões, além dos demais critérios.",
     },
     alerts,
   };
