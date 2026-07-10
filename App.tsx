@@ -4,13 +4,14 @@ import { AccessPendingPage } from "@/pages/AccessPendingPage";
 import { AdminUsersPage } from "@/pages/AdminUsersPage";
 import { AreaProPage } from "@/pages/AreaProPage";
 import { CentralStrategicPage } from "@/pages/CentralStrategicPage";
+import { CompanyDossierPage } from "@/pages/CompanyDossierPage";
 import { DiagnosticPage } from "@/pages/DiagnosticPage";
 import { DocumentosPage } from "@/pages/DocumentosPage";
 import { GuidedDiagnosticPage } from "@/pages/GuidedDiagnosticPage";
 import { LeadDetailPage } from "@/pages/LeadDetailPage";
-import { LeadsPage } from "@/pages/LeadsPage";
 import { LoginPage } from "@/pages/LoginPage";
 import { ParecerPage } from "@/pages/ParecerPage";
+import { PassivoSimulatorPage } from "@/pages/PassivoSimulatorPage";
 import { PrintPage } from "@/pages/PrintPage";
 import { PublicRadarPage } from "@/pages/PublicRadarPage";
 
@@ -48,13 +49,28 @@ export function App() {
           </ProtectedRoute>
         }
       />
+      <Route
+        path="/app/simulador-passivo"
+        element={
+          <ProtectedRoute>
+            <PassivoSimulatorPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/app/empresas/:id"
+        element={
+          <ProtectedRoute>
+            <CompanyDossierPage />
+          </ProtectedRoute>
+        }
+      />
 
-      {/* Rota legada preservada durante a migração estrutural. */}
       <Route
         path="/app/leads"
         element={
           <ProtectedRoute>
-            <LeadsPage />
+            <Navigate to="/app/pro" replace />
           </ProtectedRoute>
         }
       />
