@@ -4,7 +4,7 @@
 
 - Repositorio: `drjfalcao-bot/radar-tributario`
 - Branch: `main`
-- Base lida para esta fase: `028bb1bc1ca0f2a13c733a5c8b56ba2e1b4f98ea`
+- Base lida para esta fase: `54c6094826e533d6a063ee9c9ba23a6b249a5bb8`
 - Referencia normativa: `docs/ESPECIFICACAO_CALCULADORA_NEGOCIACAO.md`
 - Referencia HTML: caminho informado nao ficou acessivel no ambiente local; a implementacao seguiu a ordem de interpretacao da especificacao.
 
@@ -34,6 +34,47 @@ Itens executados:
 
 ## Proximas fases
 
+## Pagina 0 - Central Estrategica
+
+Status: concluida.
+
+Arquivos alterados:
+
+- `pages/LeadsPage.tsx`
+- `docs/PLANO_IMPLEMENTACAO_DIAGNOSTICO_ESTRATEGICO.md`
+
+Componentes criados no escopo da pagina:
+
+- `StrategicSimulatorCard`
+- `PublicUpdateCard`
+- `Modal`
+- `SideLink`
+
+Comportamento desktop:
+
+- Cabeçalho horizontal verde-petroleo escuro.
+- Navegacao lateral estreita e discreta.
+- Simulador de Passivo e Simulador da Reforma lado a lado, com mesma altura e peso visual equivalente.
+- Faixa clara de Novo Diagnostico Estrategico abaixo dos simuladores.
+- Secao editorial Fique ligado nas decisoes com fontes oficiais.
+
+Comportamento mobile:
+
+- Ordem preservada: cabecalho, passivo, reforma, diagnostico, decisoes.
+- Cards empilhados sem overflow horizontal.
+- Botoes principais permanecem visiveis e acionaveis.
+
+Limitacoes:
+
+- O simulador da reforma permanece como modulo em preparacao; nenhum motor foi implementado nesta tarefa.
+- As decisoes usam links institucionais oficiais, sem noticias, datas ou eventos inventados.
+- A imagem aprovada nao estava disponivel como arquivo de imagem no ambiente; a implementacao foi comparada contra a especificacao visual e contra as capturas locais em 1680 px, 1440 px e 390 px.
+
+Proximos passos:
+
+- Implementar o modulo oficial da reforma em tarefa propria.
+- Integrar futuras atualizacoes oficiais somente com fonte validada.
+
 Fase 2 permanece pendente e nao foi iniciada:
 
 - Reconstrucao visual completa da interface.
@@ -49,5 +90,5 @@ Fase 3 permanece pendente:
 
 ## Commit
 
-- Mensagem planejada: `refactor: corrige motores de simulacao estrategica`
-- SHA: pendente de publicacao
+- Ultimo commit publicado: `54c6094826e533d6a063ee9c9ba23a6b249a5bb8`
+- Proximo commit planejado: `feat: implementa pagina inicial da central estrategica`
