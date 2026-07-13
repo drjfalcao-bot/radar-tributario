@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type LucideIcon, type ReactNode } from "react";
-import { Link, useLocation, useNavigate } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 import {
   ArrowRight,
   BarChart3,
@@ -7,7 +7,6 @@ import {
   BriefcaseBusiness,
   Building2,
   Calculator,
-  CircleDollarSign,
   FileSearch,
   Landmark,
   LayoutDashboard,
@@ -15,224 +14,276 @@ import {
   Scale,
   Search,
   Settings,
-  ShieldAlert,
+  ShieldCheck,
+  Sparkles,
   Target,
+  TrendingUp,
   UserCircle,
-  Users,
 } from "lucide-react";
 import { BrandMark } from "@/components/BrandMark";
-import { formatCurrency } from "@/lib/RiskCalculator";
-import { getCurrentAuthorizedUser, listDiagnostics, type AuthorizedUser, type SavedDiagnostic } from "@/lib/storage";
+import {
+  getCurrentAuthorizedUser,
+  listDiagnostics,
+  type AuthorizedUser,
+  type SavedDiagnostic,
+} from "@/lib/storage";
 
-const SOURCES = [
-  { name: "Receita Federal", text: "Acompanhe normas, atos e orientações que impactam obrigações e regras tributárias.", href: "https://www.gov.br/receitafederal/pt-br", icon: Building2 },
-  { name: "PGFN", text: "Fique por dentro de editais, transações, negociações e oportunidades de regularização.", href: "https://www.gov.br/pgfn/pt-br", icon: Scale },
-  { name: "Ministério da Fazenda", text: "Acompanhe políticas, medidas e projetos que moldam o sistema tributário brasileiro.", href: "https://www.gov.br/fazenda/pt-br", icon: Landmark },
-  { name: "IBS/CBS", text: "Novidades sobre o novo sistema de tributação sobre consumo e sua implementação.", href: "https://www.gov.br/receitafederal/pt-br/assuntos/reforma-tributaria", icon: Network },
-];
-
-type DebtKey = "simples" | "previdenciaria" | "tributaria" | "demais";
-
-type PassivoForm = {
-  size: "mei" | "me" | "epp" | "demais";
-  capag: "A" | "B" | "C" | "D" | "nao_informada";
-  impediment: "sim" | "nao" | "nao_sei";
-  rfbSituation: "inicial" | "primeiro_reparcelamento" | "reparcelamento_anterior" | "nao_sei";
-  execution: "sim" | "nao";
-  seizure: "sim" | "nao";
-  rfb: string;
-  pgfn: Record<DebtKey, string>;
+type OfficialSource = {
+  name: string;
+  description: string;
+  href: string;
+  icon: LucideIcon;
+  subject: string;
 };
 
+const OFFICIAL_SOURCES: OfficialSource[] = [
+  {
+    name: "Receita Federal",
+    subject: "Normas e orientações",
+    description: "Acompanhe atos, obrigações e orientações com impacto direto na rotina tributária.",
+    href: "https://www.gov.br/receitafederal/pt-br",
+    icon: Building2,
+  },
+  {
+    name: "PGFN",
+    subject: "Transações e regularização",
+    description: "Consulte editais, modalidades de negociação e comunicados oficiais da dívida ativa.",
+    href: "https://www.gov.br/pgfn/pt-br",
+    icon: Scale,
+  },
+  {
+    name: "Ministério da Fazenda",
+    subject: "Política tributária",
+    description: "Acompanhe medidas, regulamentações e decisões que alteram o ambiente empresarial.",
+    href: "https://www.gov.br/fazenda/pt-br",
+    icon: Landmark,
+  },
+  {
+    name: "Reforma Tributária",
+    subject: "IBS, CBS e transição",
+    description: "Centralize a leitura das mudanças do novo sistema de tributação sobre o consumo.",
+    href: "https://www.gov.br/receitafederal/pt-br/assuntos/reforma-tributaria",
+    icon: Network,
+  },
+];
+
 export function CentralStrategicPage() {
-  const navigate = useNavigate();
   const [user, setUser] = useState<AuthorizedUser | null>(null);
-  const [items, setItems] = useState<SavedDiagnostic[]>([]);
+  const [diagnostics, setDiagnostics] = useState<SavedDiagnostic[]>([]);
   const [query, setQuery] = useState("");
-  const [reform, setReform] = useState({ revenue: "", regime: "", activity: "", b2b: "", purchases: "", payroll: "", taxes: "" });
-  const [passivo, setPassivo] = useState<PassivoForm>({
-    size: "demais",
-    capag: "nao_informada",
-    impediment: "nao_sei",
-    rfbSituation: "inicial",
-    execution: "nao",
-    seizure: "nao",
-    rfb: "",
-    pgfn: { simples: "", previdenciaria: "", tributaria: "", demais: "" },
-  });
 
   useEffect(() => {
     getCurrentAuthorizedUser().then(setUser).catch(() => setUser(null));
-    listDiagnostics().then(setItems).catch(() => setItems([]));
+    listDiagnostics().then(setDiagnostics).catch(() => setDiagnostics([]));
   }, []);
 
   const matches = useMemo(() => {
     const term = query.trim().toLowerCase();
     if (!term) return [];
-    return items.filter((item) => [item.input.nomeEmpresa, item.input.cnpj, item.input.contato].join(" ").toLowerCase().includes(term)).slice(0, 5);
-  }, [items, query]);
 
-  const reformResult = useMemo(() => {
-    const revenue = parseMoney(reform.revenue);
-    const taxes = parseMoney(reform.taxes);
-    const purchases = parseMoney(reform.purchases);
-    const payroll = parseMoney(reform.payroll);
-    const currentRate = revenue > 0 && taxes > 0 ? (taxes / revenue) * 100 : 0;
-    const purchaseShare = revenue > 0 ? purchases / revenue : 0;
-    const payrollShare = revenue > 0 ? payroll / revenue : 0;
-    const b2b = Number(reform.b2b.replace(",", ".")) || 0;
-    const pressure = revenue <= 0 ? "—" : payrollShare >= 0.35 || purchaseShare <= 0.1 ? "alto" : payrollShare >= 0.2 || b2b >= 60 ? "médio" : "a validar";
-    return { currentRate, annualTaxes: taxes * 12, pressure };
-  }, [reform]);
-
-  const passivoResult = useMemo(() => {
-    const pgfn = Object.values(passivo.pgfn).reduce((sum, value) => sum + parseMoney(value), 0);
-    const rfb = parseMoney(passivo.rfb);
-    const total = pgfn + rfb;
-    const rfbEntry = passivo.rfbSituation === "primeiro_reparcelamento" ? rfb * 0.1 : passivo.rfbSituation === "reparcelamento_anterior" ? rfb * 0.2 : 0;
-    const priority = passivo.execution === "sim" || passivo.seizure === "sim";
-    const pressure = total <= 0 ? "—" : priority || rfbEntry > 0 ? "alto" : total > 1_000_000 ? "médio" : "em análise";
-    return { pgfn, rfb, total, rfbEntry, priority, pressure };
-  }, [passivo]);
-
-  function setPgfn(key: DebtKey, value: string) {
-    setPassivo((current) => ({ ...current, pgfn: { ...current.pgfn, [key]: value } }));
-  }
-
-  function openSimulator() {
-    navigate("/app/simulador-passivo", {
-      state: {
-        seed: {
-          companySize: passivo.size,
-          capag: passivo.capag,
-          impediment: passivo.impediment,
-          executionActive: passivo.execution,
-          seizureIdentified: passivo.seizure,
-          rfbAmount: parseMoney(passivo.rfb),
-          rfbSituation: passivo.rfbSituation,
-          pgfnAmounts: Object.fromEntries(Object.entries(passivo.pgfn).map(([key, value]) => [key, parseMoney(value)])),
-        },
-      },
-    });
-  }
+    return diagnostics
+      .filter((item) =>
+        [item.input.nomeEmpresa, item.input.cnpj, item.input.contato]
+          .join(" ")
+          .toLowerCase()
+          .includes(term),
+      )
+      .slice(0, 5);
+  }, [diagnostics, query]);
 
   const displayName = user?.nome || user?.email || "Usuário";
+  const displayRole = formatRole(user?.role);
 
   return (
-    <main className="min-h-screen bg-[#f5f6f5] text-[#102524]">
-      <div className="grid min-h-screen lg:grid-cols-[68px_1fr]">
-        <aside className="border-r border-white/10 bg-[#062c2e] text-white">
-          <div className="flex h-full min-h-[70px] items-center justify-between px-3 py-4 lg:min-h-screen lg:flex-col">
-            <div className="flex items-center gap-3 lg:flex-col lg:gap-5">
-              <Link to="/app/inicio" aria-label="Radar Tributário"><BrandMark size="md" /></Link>
-              <nav className="flex gap-2 lg:flex-col">
+    <main className="min-h-screen bg-[#f3f5f3] text-[#142725]">
+      <div className="grid min-h-screen lg:grid-cols-[72px_minmax(0,1fr)]">
+        <aside className="border-b border-white/10 bg-[#052d2e] text-white lg:border-b-0 lg:border-r">
+          <div className="flex min-h-[72px] items-center justify-between px-3 py-3 lg:min-h-screen lg:flex-col lg:py-5">
+            <div className="flex items-center gap-3 lg:flex-col lg:gap-6">
+              <Link to="/app/inicio" aria-label="Radar Tributário" className="grid h-11 w-11 place-items-center">
+                <BrandMark size="md" />
+              </Link>
+
+              <nav className="flex items-center gap-2 lg:flex-col">
                 <SideLink to="/app/inicio" icon={LayoutDashboard} label="Início" />
-                <SideLink to="/app/pro" icon={BarChart3} label="Área Pro" />
-                <SideLink to="/app/simulador-passivo" icon={Calculator} label="Simulador" />
+                <SideLink to="/app/pro" icon={BriefcaseBusiness} label="Área Pro" />
+                <SideLink to="/app/simulador-passivo" icon={Calculator} label="Simulador de Passivo" />
+                <SideLink to="/app/diagnostico/novo" icon={Target} label="Diagnóstico" />
               </nav>
             </div>
+
             <SideLink to="/admin/usuarios" icon={Settings} label="Configurações" />
           </div>
         </aside>
 
         <section className="min-w-0">
-          <header className="bg-[radial-gradient(circle_at_42%_140%,rgba(15,107,95,.24),transparent_42%),linear-gradient(90deg,#05292b,#073638)] px-4 py-5 text-white sm:px-6 lg:px-7">
-            <div className="mx-auto flex max-w-[1720px] flex-col gap-5 xl:flex-row xl:items-center xl:justify-between">
-              <div>
-                <h1 className="font-serif text-3xl font-semibold md:text-[40px]">Central Estratégica</h1>
-                <p className="mt-1 max-w-xl text-sm leading-5 text-white/78">Descubra como as mudanças tributárias e o passivo federal podem afetar o caixa da sua empresa</p>
+          <header className="relative overflow-visible border-b border-white/10 bg-[radial-gradient(circle_at_62%_140%,rgba(22,111,99,.30),transparent_42%),linear-gradient(100deg,#052829_0%,#073638_55%,#052d31_100%)] px-4 py-5 text-white sm:px-6 lg:px-8">
+            <div className="mx-auto flex max-w-[1680px] flex-col gap-5 xl:flex-row xl:items-center xl:justify-between">
+              <div className="min-w-0">
+                <div className="mb-2 flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.22em] text-[#d9b56b]">
+                  <span className="h-px w-8 bg-[#d9b56b]/70" />
+                  Inteligência empresarial
+                </div>
+                <h1 className="font-serif text-3xl font-semibold tracking-[-0.02em] sm:text-4xl">
+                  Central Estratégica
+                </h1>
+                <p className="mt-2 text-sm text-white/66">
+                  Pesquise uma empresa ou inicie uma nova análise.
+                </p>
               </div>
-              <div className="flex flex-col gap-3 xl:min-w-[720px] xl:flex-row xl:items-center">
-                <div className="relative flex-1">
-                  <label className="flex min-h-12 items-center gap-3 rounded-xl border border-white/15 bg-white/8 px-4 text-white/65">
-                    <Search className="h-5 w-5" />
-                    <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Buscar empresa, CNPJ ou diagnóstico" className="w-full bg-transparent text-sm text-white outline-none placeholder:text-white/55" />
+
+              <div className="flex w-full flex-col gap-3 xl:max-w-[760px] xl:flex-row xl:items-center">
+                <div className="relative min-w-0 flex-1">
+                  <label className="flex min-h-12 items-center gap-3 rounded-xl border border-white/14 bg-white/[0.07] px-4 shadow-[inset_0_1px_0_rgba(255,255,255,.04)] backdrop-blur">
+                    <Search className="h-5 w-5 shrink-0 text-white/55" />
+                    <input
+                      value={query}
+                      onChange={(event) => setQuery(event.target.value)}
+                      placeholder="Buscar empresa, CNPJ ou diagnóstico"
+                      className="min-w-0 flex-1 bg-transparent text-sm text-white outline-none placeholder:text-white/42"
+                    />
                   </label>
+
                   {query.trim() ? (
-                    <div className="absolute left-0 right-0 top-[54px] z-40 overflow-hidden rounded-xl border border-[#dce4e0] bg-white text-[#17302e] shadow-2xl">
-                      {matches.length ? matches.map((item) => (
-                        <Link key={item.id} to={`/app/empresas/${item.id}`} className="flex items-center justify-between border-b border-[#edf1ef] px-4 py-3 last:border-0 hover:bg-[#f3f7f5]">
-                          <span><strong className="block text-sm">{item.input.nomeEmpresa}</strong><small className="text-[#71817b]">{item.input.cnpj || "CNPJ não informado"}</small></span>
-                          <ArrowRight className="h-4 w-4 text-[#0b6a60]" />
-                        </Link>
-                      )) : <p className="p-4 text-sm text-[#71817b]">Nenhuma empresa encontrada.</p>}
+                    <div className="absolute left-0 right-0 top-[56px] z-50 overflow-hidden rounded-xl border border-[#dce4e0] bg-white text-[#17302e] shadow-2xl">
+                      {matches.length ? (
+                        matches.map((item) => (
+                          <Link
+                            key={item.id}
+                            to={`/app/empresas/${item.id}`}
+                            className="flex items-center justify-between border-b border-[#edf1ef] px-4 py-3 transition last:border-0 hover:bg-[#f3f7f5]"
+                          >
+                            <span className="min-w-0">
+                              <strong className="block truncate text-sm">{item.input.nomeEmpresa}</strong>
+                              <small className="text-[#71817b]">{item.input.cnpj || "CNPJ não informado"}</small>
+                            </span>
+                            <ArrowRight className="h-4 w-4 shrink-0 text-[#0b6a60]" />
+                          </Link>
+                        ))
+                      ) : (
+                        <p className="p-4 text-sm text-[#71817b]">Nenhuma empresa encontrada.</p>
+                      )}
                     </div>
                   ) : null}
                 </div>
-                <button type="button" className="relative grid h-11 w-11 place-items-center"><Bell className="h-5 w-5" /><span className="absolute right-0 top-0 rounded-full bg-[#0c8e81] px-1.5 text-[10px] font-bold">3</span></button>
-                <div className="flex items-center gap-3"><span className="grid h-11 w-11 place-items-center rounded-full border border-[#d8aa51]/35 bg-white/10"><UserCircle className="h-7 w-7 text-[#e8d6a8]" /></span><span><strong className="block max-w-44 truncate text-sm">{displayName}</strong><small className="text-white/55">{user ? roleLabel(user.role) : "Sessão ativa"}</small></span></div>
+
+                <button
+                  type="button"
+                  aria-label="Notificações"
+                  className="grid h-11 w-11 shrink-0 place-items-center rounded-full border border-white/12 bg-white/[0.06] text-white/72 transition hover:bg-white/10 hover:text-white"
+                >
+                  <Bell className="h-5 w-5" />
+                </button>
+
+                <div className="flex min-w-0 items-center gap-3 rounded-xl border border-white/10 bg-white/[0.045] px-3 py-2">
+                  <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full border border-[#d8aa51]/35 bg-[#d8aa51]/10 text-[#ead8a8]">
+                    <UserCircle className="h-6 w-6" />
+                  </span>
+                  <span className="min-w-0 pr-2">
+                    <strong className="block max-w-44 truncate text-sm font-semibold">{displayName}</strong>
+                    <small className="block truncate text-[11px] text-white/48">{displayRole}</small>
+                  </span>
+                </div>
               </div>
             </div>
           </header>
 
-          <div className="mx-auto grid max-w-[1720px] gap-4 px-2 py-3 sm:px-4">
-            <section className="grid gap-3 2xl:grid-cols-2">
-              <DarkPanel tone="green" icon={Scale} title="Como a Reforma pode afetar sua empresa?" description="Tenha uma visão preliminar de como a Reforma Tributária pode impactar seus custos, margem e caixa.">
-                <div className="grid gap-5 xl:grid-cols-[1.05fr_.95fr]">
-                  <div className="grid content-start gap-3">
-                    <DarkInput icon={CircleDollarSign} label="Faturamento mensal" value={reform.revenue} onChange={(value) => setReform({ ...reform, revenue: value })} placeholder="R$ 0,00" />
-                    <DarkSelect icon={Calculator} label="Regime tributário" value={reform.regime} onChange={(value) => setReform({ ...reform, regime: value })} options={["Simples Nacional", "Lucro Presumido", "Lucro Real", "Outro"]} />
-                    <DarkSelect icon={BriefcaseBusiness} label="Atividade principal" value={reform.activity} onChange={(value) => setReform({ ...reform, activity: value })} options={["Comércio", "Indústria", "Serviços", "Misto"]} />
-                    <DarkInput icon={Network} label="Vendas B2B (%)" value={reform.b2b} onChange={(value) => setReform({ ...reform, b2b: value })} placeholder="Ex.: 60" suffix="%" />
-                    <DarkInput icon={Building2} label="Compras e insumos mensais" value={reform.purchases} onChange={(value) => setReform({ ...reform, purchases: value })} placeholder="R$ 0,00" />
-                    <DarkInput icon={Users} label="Folha de pagamento mensal" value={reform.payroll} onChange={(value) => setReform({ ...reform, payroll: value })} placeholder="R$ 0,00" />
-                    <DarkInput icon={Calculator} label="Tributos pagos atualmente" value={reform.taxes} onChange={(value) => setReform({ ...reform, taxes: value })} placeholder="R$ 0,00" />
-                  </div>
-                  <ResultBox title="Resultado preliminar">
-                    <ResultLine icon={CircleDollarSign} label="Carga atual estimada" value={reformResult.currentRate ? `${reformResult.currentRate.toFixed(2).replace(".", ",")}%` : "—%"} detail="sobre faturamento" />
-                    <ResultLine icon={BarChart3} label="Carga projetada" value="—%" detail="depende da simulação completa" />
-                    <ResultLine icon={CircleDollarSign} label="Possível impacto anual" value={reformResult.annualTaxes ? formatCurrency(reformResult.annualTaxes) : "R$ —"} detail="base atual informada" />
-                    <ResultLine icon={FileSearch} label="Créditos estimados" value="R$ —" detail="potencial a validar" />
-                    <ResultLine icon={Target} label="Pressão sobre margem" value={reformResult.pressure} detail="baixo • médio • alto" />
-                    <Link to="/app/diagnostico/novo" className="mt-auto inline-flex min-h-12 items-center justify-center gap-3 rounded-lg border border-[#16a896]/40 bg-[#0d7d71] px-4 text-sm font-bold text-white">VER ANÁLISE PRELIMINAR <ArrowRight className="h-4 w-4" /></Link>
-                  </ResultBox>
-                </div>
-              </DarkPanel>
+          <div className="mx-auto max-w-[1680px] px-3 py-4 sm:px-5 lg:px-7 lg:py-6">
+            <section className="grid gap-4 xl:grid-cols-2">
+              <StrategicModule
+                tone="passivo"
+                icon={Scale}
+                eyebrow="Negociação e regularização"
+                title="Simulador de Passivo"
+                description="Negocie dívidas e descubra o melhor cenário para reduzir o impacto do passivo tributário no caixa da empresa."
+                actionLabel="Simular passivo"
+                actionTo="/app/simulador-passivo"
+                status="Nenhuma simulação recente"
+                support="Informe os dados para comparar cenários de regularização."
+              >
+                <MetricRow label="Dívida consolidada" value="—" />
+                <MetricRow label="CAPAG" value="—" />
+                <MetricRow label="RFB / PGFN" value="—" />
+                <MetricRow label="Cenários disponíveis" value="—" />
+                <MetricRow label="Potencial de economia" value="—" emphasis />
+              </StrategicModule>
 
-              <DarkPanel tone="blue" icon={Landmark} title="Entenda o peso atual das suas dívidas" description="Informe seus débitos federais para entender o impacto atual no seu caixa e os caminhos estratégicos disponíveis.">
-                <div className="grid gap-4 xl:grid-cols-[.95fr_.9fr_.82fr]">
-                  <div className="grid content-start gap-3">
-                    <DarkSelect label="Porte da empresa" value={passivo.size} onChange={(value) => setPassivo({ ...passivo, size: value as PassivoForm["size"] })} options={["mei|MEI", "me|Microempresa", "epp|EPP", "demais|Demais empresas"]} />
-                    <DarkSelect label="CAPAG" value={passivo.capag} onChange={(value) => setPassivo({ ...passivo, capag: value as PassivoForm["capag"] })} options={["A", "B", "C", "D", "nao_informada|Não informada"]} />
-                    <DarkSelect label="Existe impedimento para transação?" value={passivo.impediment} onChange={(value) => setPassivo({ ...passivo, impediment: value as PassivoForm["impediment"] })} options={["sim|Sim", "nao|Não", "nao_sei|Não sei"]} />
-                    <MiniBox title="Dívidas na PGFN">
-                      <DebtInput label="Simples Nacional" value={passivo.pgfn.simples} onChange={(value) => setPgfn("simples", value)} />
-                      <DebtInput label="Previdenciário" value={passivo.pgfn.previdenciaria} onChange={(value) => setPgfn("previdenciaria", value)} />
-                      <DebtInput label="Tributário" value={passivo.pgfn.tributaria} onChange={(value) => setPgfn("tributaria", value)} />
-                      <DebtInput label="Demais Débitos" value={passivo.pgfn.demais} onChange={(value) => setPgfn("demais", value)} />
-                    </MiniBox>
-                  </div>
-                  <div className="grid content-start gap-3">
-                    <MiniBox title="Débitos na Receita Federal"><DebtInput label="Total em aberto" value={passivo.rfb} onChange={(value) => setPassivo({ ...passivo, rfb: value })} /></MiniBox>
-                    <MiniBox title="Situação atual">
-                      <Radio label="Parcelamento inicial" checked={passivo.rfbSituation === "inicial"} onChange={() => setPassivo({ ...passivo, rfbSituation: "inicial" })} />
-                      <Radio label="Primeiro reparcelamento" checked={passivo.rfbSituation === "primeiro_reparcelamento"} onChange={() => setPassivo({ ...passivo, rfbSituation: "primeiro_reparcelamento" })} />
-                      <Radio label="Já houve reparcelamento anterior" checked={passivo.rfbSituation === "reparcelamento_anterior"} onChange={() => setPassivo({ ...passivo, rfbSituation: "reparcelamento_anterior" })} />
-                      <Radio label="Não sei" checked={passivo.rfbSituation === "nao_sei"} onChange={() => setPassivo({ ...passivo, rfbSituation: "nao_sei" })} />
-                    </MiniBox>
-                    <Toggle label="Existe execução fiscal ativa?" value={passivo.execution} onChange={(value) => setPassivo({ ...passivo, execution: value })} />
-                    <Toggle label="Já ocorreu bloqueio ou penhora?" value={passivo.seizure} onChange={(value) => setPassivo({ ...passivo, seizure: value })} />
-                  </div>
-                  <ResultBox title="Resultado preliminar">
-                    <ResultLine icon={FileSearch} label="Passivo federal informado" value={passivoResult.total ? formatCurrency(passivoResult.total) : "R$ —"} detail="valor consolidado" />
-                    <ResultLine icon={ShieldAlert} label="Pressão financeira do cenário atual" value={passivoResult.pressure} detail="baixo • médio • alto" />
-                    <ResultLine icon={Target} label="Possível cenário estratégico" value={passivoResult.total ? "analisar" : "—"} detail="negociação • parcelamento • transação" />
-                    <ResultLine icon={Scale} label="Atenção prioritária" value={passivoResult.priority ? "sim" : "—"} detail="pontos de risco identificados" />
-                    {passivo.impediment === "sim" ? <div className="mb-3 rounded-lg border border-amber-300/30 bg-amber-300/10 p-3 text-xs text-amber-100"><strong className="block">Transação indisponível no cenário atual</strong><span className="mt-1 block text-amber-100/75">Avaliar regularização possível e estratégia em duas etapas.</span></div> : null}
-                    <button type="button" onClick={openSimulator} className="mt-auto inline-flex min-h-12 items-center justify-center gap-3 rounded-lg border border-blue-300/25 bg-[#155b91] px-4 text-sm font-bold text-white">VER RESUMO DO CENÁRIO <ArrowRight className="h-4 w-4" /></button>
-                  </ResultBox>
-                </div>
-              </DarkPanel>
+              <StrategicModule
+                tone="reforma"
+                icon={TrendingUp}
+                eyebrow="Impacto e preparação"
+                title="Simulador da Reforma"
+                description="Projete os efeitos da Reforma Tributária no negócio e antecipe decisões sobre preço, crédito, margem e estrutura."
+                actionLabel="Simular reforma"
+                actionTo="/app/diagnostico/novo"
+                status="Nova projeção"
+                support="Informe as premissas para projetar impactos e oportunidades."
+              >
+                <MetricRow label="Carga atual" value="—" />
+                <MetricRow label="Carga projetada" value="—" />
+                <MetricRow label="Créditos estimados" value="—" />
+                <MetricRow label="Pressão sobre margem" value="—" />
+                <MetricRow label="Impacto anual" value="—" emphasis />
+              </StrategicModule>
             </section>
 
-            <section className="flex flex-col gap-4 rounded-xl border border-[#dce4e0] bg-white px-5 py-4 shadow-sm md:flex-row md:items-center md:justify-between">
-              <div className="flex items-center gap-4"><span className="grid h-14 w-14 shrink-0 place-items-center rounded-full border border-[#d5dfda] bg-white text-[#0b6a60] shadow"><Target className="h-7 w-7" /></span><div><h2 className="font-serif text-xl font-semibold text-[#17302e]">Uma análise completa revela oportunidades que os números sozinhos não mostram.</h2><p className="mt-1 text-sm text-[#61736d]">Nossos especialistas combinam dados, legislação e estratégia para transformar risco em decisão e resultado.</p></div></div>
-              <Link to="/app/diagnostico/novo" className="inline-flex min-h-12 items-center justify-center gap-3 rounded-lg bg-[#07574f] px-6 text-sm font-bold text-white">SOLICITAR ANÁLISE COMPLETA <ArrowRight className="h-5 w-5" /></Link>
+            <section className="relative mt-4 overflow-hidden rounded-2xl border border-[#d9e1dd] bg-white shadow-[0_12px_35px_rgba(15,45,40,.07)]">
+              <div className="absolute inset-y-0 left-0 w-1.5 bg-[#0b6a60]" />
+              <div className="flex flex-col gap-5 px-5 py-5 sm:px-6 lg:flex-row lg:items-center lg:justify-between lg:px-8">
+                <div className="flex min-w-0 items-start gap-4">
+                  <span className="grid h-14 w-14 shrink-0 place-items-center rounded-2xl border border-[#cfe0da] bg-[#eff6f3] text-[#0b665d]">
+                    <Target className="h-7 w-7" />
+                  </span>
+                  <div>
+                    <div className="mb-1 flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.18em] text-[#907137]">
+                      <Sparkles className="h-3.5 w-3.5" />
+                      Visão integrada
+                    </div>
+                    <h2 className="font-serif text-2xl font-semibold tracking-[-0.02em] text-[#17302e]">
+                      Novo Diagnóstico Estratégico
+                    </h2>
+                    <p className="mt-1 text-sm leading-6 text-[#60716b]">
+                      Combina empresa + passivo + reforma + riscos + oportunidades + estratégia.
+                    </p>
+                  </div>
+                </div>
+
+                <Link
+                  to="/app/diagnostico/novo"
+                  className="inline-flex min-h-12 shrink-0 items-center justify-center gap-3 rounded-xl bg-[#075d55] px-6 text-xs font-bold uppercase tracking-[0.08em] text-white shadow-lg shadow-[#075d55]/15 transition hover:-translate-y-0.5 hover:bg-[#064f49]"
+                >
+                  Iniciar diagnóstico completo
+                  <ArrowRight className="h-4 w-4" />
+                </Link>
+              </div>
             </section>
 
-            <section className="grid gap-4 rounded-xl border border-[#e0e5e2] bg-white p-4 shadow-sm xl:grid-cols-[180px_1fr]">
-              <div className="border-b border-[#e7ece9] pb-4 xl:border-b-0 xl:border-r xl:pr-5"><h2 className="font-serif text-2xl font-semibold leading-tight text-[#17302e]">Fique ligado<br />nas decisões</h2><p className="mt-5 text-sm leading-6 text-[#61736d]">Acompanhe atualizações de fontes oficiais que impactam sua empresa.</p></div>
-              <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">{SOURCES.map((source) => <SourceCard key={source.name} {...source} />)}</div>
+            <section className="mt-7">
+              <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+                <div>
+                  <div className="mb-2 flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.18em] text-[#92723a]">
+                    <FileSearch className="h-3.5 w-3.5" />
+                    Monitoramento oficial
+                  </div>
+                  <h2 className="font-serif text-3xl font-semibold tracking-[-0.02em] text-[#17302e]">
+                    Fique ligado nas decisões
+                  </h2>
+                  <p className="mt-2 max-w-3xl text-sm leading-6 text-[#677771]">
+                    Atualizações estratégicas publicadas por órgãos públicos para acompanhar impactos e oportunidades.
+                  </p>
+                </div>
+
+                <span className="inline-flex items-center gap-2 text-xs font-semibold text-[#667873]">
+                  <ShieldCheck className="h-4 w-4 text-[#0b6a60]" />
+                  Acesso direto às fontes oficiais
+                </span>
+              </div>
+
+              <div className="grid gap-3 sm:grid-cols-2 2xl:grid-cols-4">
+                {OFFICIAL_SOURCES.map((source) => (
+                  <SourceCard key={source.name} {...source} />
+                ))}
+              </div>
             </section>
           </div>
         </section>
@@ -241,26 +292,169 @@ export function CentralStrategicPage() {
   );
 }
 
-function DarkPanel({ tone, icon: Icon, title, description, children }: { tone: "green" | "blue"; icon: LucideIcon; title: string; description: string; children: ReactNode }) {
-  const bg = tone === "green" ? "bg-[radial-gradient(circle_at_80%_22%,rgba(18,132,117,.18),transparent_38%),linear-gradient(135deg,#042e2f,#06433f)]" : "bg-[radial-gradient(circle_at_82%_20%,rgba(29,108,167,.22),transparent_38%),linear-gradient(135deg,#04313a,#053d55)]";
-  return <article className={`relative overflow-hidden rounded-xl border border-white/10 p-4 text-white shadow-xl md:p-5 ${bg}`}><div className="absolute inset-0 opacity-[.06] [background-image:linear-gradient(rgba(255,255,255,.18)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,.18)_1px,transparent_1px)] [background-size:34px_34px]" /><div className="relative"><div className="mb-4 flex items-start gap-4 border-b border-white/10 pb-4"><span className="grid h-14 w-14 shrink-0 place-items-center rounded-full border border-[#d8aa51]/70 text-[#d8aa51]"><Icon className="h-7 w-7" /></span><div><h2 className="font-serif text-2xl font-semibold">{title}</h2><p className="mt-1 text-sm leading-5 text-white/72">{description}</p></div></div>{children}</div></article>;
+function StrategicModule({
+  tone,
+  icon: Icon,
+  eyebrow,
+  title,
+  description,
+  actionLabel,
+  actionTo,
+  status,
+  support,
+  children,
+}: {
+  tone: "passivo" | "reforma";
+  icon: LucideIcon;
+  eyebrow: string;
+  title: string;
+  description: string;
+  actionLabel: string;
+  actionTo: string;
+  status: string;
+  support: string;
+  children: ReactNode;
+}) {
+  const palette =
+    tone === "passivo"
+      ? {
+          shell:
+            "bg-[radial-gradient(circle_at_82%_14%,rgba(33,152,130,.20),transparent_34%),radial-gradient(circle_at_10%_100%,rgba(20,91,83,.34),transparent_45%),linear-gradient(145deg,#032b2d_0%,#063c39_58%,#052f32_100%)]",
+          accent: "text-[#d9b56b]",
+          icon: "border-[#d9b56b]/48 bg-[#d9b56b]/8 text-[#e4c77f]",
+          button: "bg-[#0b7a6e] hover:bg-[#096b61] shadow-[#021d1d]/35",
+          glow: "bg-[#1bc4a7]/12",
+        }
+      : {
+          shell:
+            "bg-[radial-gradient(circle_at_80%_12%,rgba(45,130,183,.22),transparent_34%),radial-gradient(circle_at_6%_100%,rgba(24,94,118,.34),transparent_45%),linear-gradient(145deg,#062d38_0%,#073f52_58%,#062e3b_100%)]",
+          accent: "text-[#d9b56b]",
+          icon: "border-[#d9b56b]/48 bg-[#d9b56b]/8 text-[#e4c77f]",
+          button: "bg-[#176d96] hover:bg-[#145f84] shadow-[#031c26]/35",
+          glow: "bg-[#45a9dc]/12",
+        };
+
+  return (
+    <article
+      className={`group relative min-h-[500px] overflow-hidden rounded-2xl border border-white/10 text-white shadow-[0_22px_50px_rgba(4,35,33,.18)] ${palette.shell}`}
+    >
+      <div className="pointer-events-none absolute inset-0 opacity-[0.055] [background-image:linear-gradient(rgba(255,255,255,.24)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,.24)_1px,transparent_1px)] [background-size:42px_42px]" />
+      <div className={`pointer-events-none absolute -right-24 top-20 h-72 w-72 rounded-full blur-3xl ${palette.glow}`} />
+
+      <div className="relative flex min-h-[500px] flex-col p-5 sm:p-6 lg:p-7">
+        <div className="flex items-start justify-between gap-4 border-b border-white/10 pb-5">
+          <div className="flex min-w-0 items-start gap-4">
+            <span className={`grid h-14 w-14 shrink-0 place-items-center rounded-2xl border ${palette.icon}`}>
+              <Icon className="h-7 w-7" strokeWidth={1.7} />
+            </span>
+            <div className="min-w-0">
+              <p className={`text-[10px] font-bold uppercase tracking-[0.2em] ${palette.accent}`}>{eyebrow}</p>
+              <h2 className="mt-2 font-serif text-3xl font-semibold tracking-[-0.025em]">{title}</h2>
+              <p className="mt-2 max-w-xl text-sm leading-6 text-white/66">{description}</p>
+            </div>
+          </div>
+        </div>
+
+        <div className="grid flex-1 gap-5 py-5 lg:grid-cols-[minmax(0,1fr)_220px]">
+          <div className="rounded-2xl border border-white/10 bg-black/10 px-4 sm:px-5">
+            {children}
+          </div>
+
+          <div className="flex min-h-[220px] flex-col justify-between rounded-2xl border border-white/10 bg-white/[0.045] p-5 backdrop-blur-sm">
+            <div>
+              <div className="mb-5 grid h-12 w-12 place-items-center rounded-xl border border-white/10 bg-white/[0.055] text-white/72">
+                {tone === "passivo" ? <BarChart3 className="h-6 w-6" /> : <TrendingUp className="h-6 w-6" />}
+              </div>
+              <p className="text-sm font-semibold text-white/92">{status}</p>
+              <p className="mt-2 text-xs leading-5 text-white/48">{support}</p>
+            </div>
+
+            <div className="mt-7 border-t border-white/10 pt-4">
+              <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-white/38">Próxima leitura</p>
+              <p className="mt-2 text-xs leading-5 text-white/66">
+                Resultado baseado somente em dados efetivamente informados e validados.
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <Link
+          to={actionTo}
+          className={`inline-flex min-h-12 w-full items-center justify-center gap-3 rounded-xl px-5 text-xs font-bold uppercase tracking-[0.1em] text-white shadow-lg transition hover:-translate-y-0.5 ${palette.button}`}
+        >
+          {actionLabel}
+          <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
+        </Link>
+      </div>
+    </article>
+  );
 }
 
-function DarkInput({ icon: Icon, label, value, onChange, placeholder, suffix }: { icon?: LucideIcon; label: string; value: string; onChange: (value: string) => void; placeholder: string; suffix?: string }) {
-  return <label className="grid grid-cols-[minmax(125px,.9fr)_1.1fr] items-center gap-3 text-xs text-white/90"><span className="flex items-center gap-2">{Icon ? <Icon className="h-4 w-4 text-white/70" /> : null}{label}</span><span className="flex min-h-10 items-center rounded-lg border border-white/15 bg-black/10 px-3"><input value={value} onChange={(event) => onChange(event.target.value)} placeholder={placeholder} className="min-w-0 flex-1 bg-transparent text-right text-sm text-white outline-none placeholder:text-white/45" />{suffix ? <span className="ml-2 text-white/55">{suffix}</span> : null}</span></label>;
+function MetricRow({ label, value, emphasis = false }: { label: string; value: string; emphasis?: boolean }) {
+  return (
+    <div className="flex min-h-[57px] items-center justify-between gap-4 border-b border-white/10 py-3 last:border-b-0">
+      <span className="text-xs text-white/62">{label}</span>
+      <strong className={emphasis ? "text-lg font-semibold text-[#68ddbd]" : "text-base font-semibold text-white/88"}>
+        {value}
+      </strong>
+    </div>
+  );
 }
 
-function DarkSelect({ icon: Icon, label, value, onChange, options }: { icon?: LucideIcon; label: string; value: string; onChange: (value: string) => void; options: string[] }) {
-  return <label className="grid grid-cols-[minmax(125px,.9fr)_1.1fr] items-center gap-3 text-xs text-white/90"><span className="flex items-center gap-2">{Icon ? <Icon className="h-4 w-4 text-white/70" /> : null}{label}</span><select value={value} onChange={(event) => onChange(event.target.value)} className="min-h-10 rounded-lg border border-white/15 bg-black/10 px-3 text-sm text-white outline-none [color-scheme:dark]"><option value="">Selecione</option>{options.map((option) => { const [v, l] = option.includes("|") ? option.split("|") : [option, option]; return <option key={v} value={v}>{l}</option>; })}</select></label>;
+function SourceCard({ name, subject, description, href, icon: Icon }: OfficialSource) {
+  return (
+    <a
+      href={href}
+      target="_blank"
+      rel="noreferrer"
+      className="group flex min-h-[230px] flex-col rounded-2xl border border-[#dde5e1] bg-white p-5 shadow-[0_10px_28px_rgba(18,54,48,.055)] transition duration-200 hover:-translate-y-1 hover:border-[#cbd9d3] hover:shadow-[0_18px_38px_rgba(18,54,48,.09)]"
+    >
+      <div className="flex items-start justify-between gap-3">
+        <span className="grid h-12 w-12 place-items-center rounded-xl border border-[#d8e4df] bg-[#f1f6f4] text-[#0b665d]">
+          <Icon className="h-6 w-6" strokeWidth={1.7} />
+        </span>
+        <span className="rounded-full border border-[#dbe5e0] bg-[#f8faf9] px-2.5 py-1 text-[9px] font-bold uppercase tracking-[0.08em] text-[#668079]">
+          Fonte oficial
+        </span>
+      </div>
+
+      <p className="mt-5 text-[10px] font-bold uppercase tracking-[0.15em] text-[#9a783d]">{subject}</p>
+      <h3 className="mt-2 font-serif text-xl font-semibold text-[#17302e]">{name}</h3>
+      <p className="mt-2 flex-1 text-sm leading-6 text-[#657670]">{description}</p>
+
+      <span className="mt-5 inline-flex items-center gap-2 text-xs font-bold uppercase tracking-[0.06em] text-[#0b665d]">
+        Ver atualizações
+        <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />
+      </span>
+    </a>
+  );
 }
 
-function MiniBox({ title, children }: { title: string; children: ReactNode }) { return <div className="rounded-xl border border-white/10 bg-black/8 p-3"><p className="mb-3 text-[10px] font-bold uppercase tracking-[.12em] text-white/80">{title}</p><div className="grid gap-2">{children}</div></div>; }
-function DebtInput({ label, value, onChange }: { label: string; value: string; onChange: (value: string) => void }) { return <label className="grid grid-cols-[1fr_112px] items-center gap-3 text-xs text-white/88"><span>{label}</span><span className="flex min-h-9 items-center rounded-lg border border-white/15 bg-black/10 px-2"><span className="mr-1 text-white/45">R$</span><input value={value} onChange={(event) => onChange(event.target.value)} placeholder="0,00" className="min-w-0 flex-1 bg-transparent text-right text-xs text-white outline-none placeholder:text-white/40" /></span></label>; }
-function Radio({ label, checked, onChange }: { label: string; checked: boolean; onChange: () => void }) { return <label className="flex cursor-pointer items-center gap-2 text-xs text-white/84"><input type="radio" checked={checked} onChange={onChange} className="h-4 w-4 accent-[#38c6a8]" />{label}</label>; }
-function Toggle({ label, value, onChange }: { label: string; value: "sim" | "nao"; onChange: (value: "sim" | "nao") => void }) { return <div className="rounded-xl border border-white/10 bg-black/8 p-3"><p className="mb-2 text-xs text-white/88">{label}</p><div className="grid grid-cols-2 overflow-hidden rounded-lg border border-white/15"><button type="button" onClick={() => onChange("nao")} className={`min-h-9 text-xs font-semibold ${value === "nao" ? "bg-[#0f7167] text-white" : "bg-black/10 text-white/60"}`}>Não</button><button type="button" onClick={() => onChange("sim")} className={`min-h-9 border-l border-white/15 text-xs font-semibold ${value === "sim" ? "bg-[#0f7167] text-white" : "bg-black/10 text-white/60"}`}>Sim</button></div></div>; }
-function ResultBox({ title, children }: { title: string; children: ReactNode }) { return <div className="flex min-h-[390px] flex-col rounded-xl border border-white/10 bg-black/10 p-4"><p className="text-sm font-semibold">{title}</p><div className="mt-2 grid flex-1">{children}</div></div>; }
-function ResultLine({ icon: Icon, label, value, detail }: { icon: LucideIcon; label: string; value: string; detail: string }) { return <div className="grid grid-cols-[26px_1fr_auto] items-center gap-2 border-b border-white/10 py-3"><Icon className="h-4 w-4 text-white/72" /><span><span className="block text-xs text-white/88">{label}</span><small className="text-[10px] text-white/45">{detail}</small></span><strong className="text-right text-base">{value}</strong></div>; }
-function SourceCard({ name, text, href, icon: Icon }: { name: string; text: string; href: string; icon: LucideIcon }) { return <a href={href} target="_blank" rel="noreferrer" className="group flex min-h-[210px] flex-col rounded-xl border border-[#e0e6e3] bg-white p-4 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"><div className="flex items-start justify-between"><span className="grid h-12 w-12 place-items-center rounded-lg bg-[#f2f6f4] text-[#0b6158]"><Icon className="h-6 w-6" /></span><span className="rounded-full border border-[#d6e1dc] px-2 py-1 text-[9px] text-[#547069]">● Fonte oficial</span></div><h3 className="mt-4 font-serif text-lg font-semibold text-[#17302e]">{name}</h3><p className="mt-2 flex-1 text-sm leading-5 text-[#61736d]">{text}</p><span className="mt-4 inline-flex items-center gap-2 text-xs font-bold text-[#0b6158]">Ver atualizações <ArrowRight className="h-4 w-4" /></span></a>; }
-function SideLink({ to, icon: Icon, label }: { to: string; icon: LucideIcon; label: string }) { const location = useLocation(); const active = location.pathname === to || location.pathname.startsWith(`${to}/`); return <Link to={to} title={label} aria-label={label} className={`grid h-11 w-11 place-items-center rounded-lg ${active ? "bg-[#0b7168] text-white" : "text-white/65 hover:bg-white/10 hover:text-white"}`}><Icon className="h-5 w-5" /></Link>; }
-function parseMoney(value: string) { const clean = value.replace(/[^0-9,.-]/g, ""); return clean.includes(",") ? Number(clean.replace(/\./g, "").replace(",", ".")) || 0 : Number(clean) || 0; }
-function roleLabel(role: AuthorizedUser["role"]) { return ({ owner: "Administrador", admin: "Administrador", especialista: "Especialista", hunter: "Consultor", viewer: "Visualizador" } as Record<AuthorizedUser["role"], string>)[role]; }
+function SideLink({ to, icon: Icon, label }: { to: string; icon: LucideIcon; label: string }) {
+  const location = useLocation();
+  const active = location.pathname === to || location.pathname.startsWith(`${to}/`);
+
+  return (
+    <Link
+      to={to}
+      title={label}
+      aria-label={label}
+      className={`grid h-11 w-11 place-items-center rounded-xl transition ${
+        active
+          ? "bg-[#0b7168] text-white shadow-lg shadow-black/15"
+          : "text-white/58 hover:bg-white/10 hover:text-white"
+      }`}
+    >
+      <Icon className="h-5 w-5" />
+    </Link>
+  );
+}
+
+function formatRole(role: string | undefined) {
+  if (!role) return "Sessão ativa";
+
+  return role
+    .replaceAll("_", " ")
+    .toLowerCase()
+    .replace(/(^|\s)\S/g, (letter) => letter.toUpperCase());
+}
