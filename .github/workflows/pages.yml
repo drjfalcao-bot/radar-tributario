@@ -33,6 +33,29 @@ jobs:
       - name: Build
         run: npm run build
 
+      - name: Build Academia Passivo Fiscal static route
+        run: |
+          mkdir -p dist/academia
+          cat \
+            academia-passivo-fiscal/part0.b64 \
+            academia-passivo-fiscal/part1.b64 \
+            academia-passivo-fiscal/part2.b64 \
+            academia-passivo-fiscal/part3.b64 \
+            academia-passivo-fiscal/part4.b64 \
+            academia-passivo-fiscal/part5.b64 \
+            academia-passivo-fiscal/part6a.b64 \
+            academia-passivo-fiscal/part6b.b64 \
+            academia-passivo-fiscal/part6c.b64 \
+            academia-passivo-fiscal/part6d.b64 \
+            academia-passivo-fiscal/part6e.b64 \
+            academia-passivo-fiscal/part6f.b64 \
+            academia-passivo-fiscal/part7.b64 \
+            academia-passivo-fiscal/part8.b64 \
+            | tr -d '\n\r\t ' \
+            | base64 --decode > dist/academia/index.html
+          test "$(wc -c < dist/academia/index.html)" -eq 36622
+          grep -q "Transforme dívida fiscal em decisão estratégica." dist/academia/index.html
+
       - name: SPA fallback
         run: cp dist/index.html dist/404.html
 
