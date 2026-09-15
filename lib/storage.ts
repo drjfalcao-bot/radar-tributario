@@ -45,7 +45,7 @@ export type SavedDiagnostic = {
   status: DiagnosticStatus;
   input: DiagnosticInput;
   result: DiagnosticResult;
-  anotacoesInternas?: string | null;
+  anotacoesInternas?: string;
   parecer?: ParecerSection[] | null;
   crm?: LeadCrmData | null;
 };
@@ -203,7 +203,7 @@ function rowToSaved(row: Record<string, any>): SavedDiagnostic {
     status: row.status ?? "lead_parcial",
     input,
     result,
-    anotacoesInternas: row.anotacoes_internas ?? null,
+    anotacoesInternas: row.anotacoes_internas ?? undefined,
     parecer: row.parecer ?? null,
     crm: normalizeCrmData(input, storedCrm),
   };
