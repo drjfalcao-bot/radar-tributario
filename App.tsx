@@ -14,6 +14,7 @@ import { ParecerPage } from "@/pages/ParecerPage";
 import { PassivoSimulatorPage } from "@/pages/PassivoSimulatorPage";
 import { PrintPage } from "@/pages/PrintPage";
 import { PublicRadarPage } from "@/pages/PublicRadarPage";
+import { ReformOpportunityPage } from "@/pages/ReformOpportunityPage";
 
 export function App() {
   return (
@@ -54,6 +55,14 @@ export function App() {
         element={
           <ProtectedRoute>
             <PassivoSimulatorPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/app/filtro-reforma"
+        element={
+          <ProtectedRoute>
+            <ReformOpportunityPage />
           </ProtectedRoute>
         }
       />
